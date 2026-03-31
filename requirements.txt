@@ -1,0 +1,12 @@
+# 深度学习框架（服务器用 CUDA 版，见下方安装命令）
+# torch 和 torchvision 通过 conda/pip 单独安装，不写在这里
+# 原因：CUDA 版本需要根据服务器 GPU 驱动选择
+
+# 其余依赖
+numpy>=1.24
+scipy>=1.10
+scikit-learn>=1.2
+matplotlib>=3.6
+Pillow>=9.0
+tqdm>=4.64
+reedsolo>=1.7
