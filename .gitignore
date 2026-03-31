@@ -1,0 +1,19 @@
+# 模型权重（体积大，不上传）
+checkpoints/
+*.pth
+*.pt
+
+# 评估结果图片
+results/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+
+# 数据集（本地自行放置）
+# fingerprints/ 目录保留结构但不上传图片
+fingerprints/**/*.tif
+fingerprints/**/*.bmp
+fingerprints/**/*.png
