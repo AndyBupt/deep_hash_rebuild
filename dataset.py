@@ -1,6 +1,6 @@
 """
 FVC2002 指纹数据集加载模块
-文件命名格式: {person_id}_{sample_id}.tif
+文件命名格式: {person_id}_{sample_id}.bmp
 """
 
 import os
@@ -33,9 +33,9 @@ class FVCDataset(Dataset):
 
         for db_dir in db_dirs:
             db_path = Path(db_dir)
-            tif_files = sorted(db_path.glob("*.tif"))
+            tif_files = sorted(db_path.glob("*.bmp"))
             for f in tif_files:
-                # 文件名格式: 101_1.tif -> person_id=101, sample_id=1
+                # 文件名格式: 101_1.bmp -> person_id=101, sample_id=1
                 stem = f.stem  # e.g. "101_1"
                 person_id = stem.split("_")[0]
                 # 用 db_dir+person_id 作为全局唯一key，避免不同DB的相同ID冲突
@@ -104,7 +104,7 @@ def build_dataloaders(data_root, db_names, train_ratio=0.7, batch_size=8, seed=4
     person_samples = {}  # key -> [(path, key)]
     for db_dir in db_dirs:
         db_path = Path(db_dir)
-        for f in sorted(db_path.glob("*.tif")):
+        for f in sorted(db_path.glob("*.bmp")):
             person_id = f.stem.split("_")[0]
             key = f"{db_dir}/{person_id}"
             if key not in person_samples:

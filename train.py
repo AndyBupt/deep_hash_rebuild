@@ -17,10 +17,14 @@ from dataset import build_dataloaders
 from model import FingerprintHashNet, HashingLoss
 
 
-DATA_ROOT = "fingerprints"
-DB_NAMES = ["DB1_B", "DB2_B", "DB3_B", "DB4_B"]
+DATA_ROOT = "/root/autodl-tmp/FVC2004"
+DB_NAMES = [
+    "DB1_A/image", "DB1_B/image", 
+    "DB2_A/image", "DB2_B/image", 
+    "DB3_A/image", "DB3_B/image"
+    ]
 HASH_DIM = 1024
-BATCH_SIZE = 8
+BATCH_SIZE = 32
 SAVE_DIR = "checkpoints"
 
 # 论文超参（FCA架构）
@@ -125,7 +129,7 @@ def main():
     # 适配小数据: 每个beta跑10 epoch，共6×10=60 epoch
     # =========================================================
     print("\n========== Step 1: 训练 JRL（fc3 + classifier）==========")
-    step1_lr = 0.1   # 论文初始lr
+    step1_lr = 0.001   # 论文初始lr
     final_lr = step1_lr
     for beta in BETA_SCHEDULE:
         model.set_beta(beta)

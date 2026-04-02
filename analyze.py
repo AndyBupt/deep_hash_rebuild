@@ -18,8 +18,12 @@ from ctm import CTM
 from sstm import SSTM
 
 
-DATA_ROOT = "fingerprints"
-DB_NAMES = ["DB1_B", "DB2_B", "DB3_B", "DB4_B"]
+DATA_ROOT = "/root/autodl-tmp/FVC2004"
+DB_NAMES = [
+    "DB1_A/image", "DB1_B/image", 
+    "DB2_A/image", "DB2_B/image", 
+    "DB3_A/image", "DB3_B/image"
+    ]
 OUTPUT_DIR = "results"
 
 

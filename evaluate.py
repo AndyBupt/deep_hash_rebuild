@@ -293,7 +293,7 @@ def plot_gs_curve_comparison(codes, labels, ctm_baseline, ctm_improved,
     return k_bits_list, gars_baseline, gars_improved
 
 
-def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
+def run_evaluation(model_path=None, G_values=None, data_root="/root/autodl-tmp/FVC2004",
                    db_names=None, output_dir="results",
                    run_comparison=True):
     """
@@ -310,7 +310,11 @@ def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
     if G_values is None:
         G_values = [128, 256, 512]
     if db_names is None:
-        db_names = ["DB1_B", "DB2_B", "DB3_B", "DB4_B"]
+        db_names = [
+    "DB1_A/image", "DB1_B/image", 
+    "DB2_A/image", "DB2_B/image", 
+    "DB3_A/image", "DB3_B/image"
+    ]
 
     os.makedirs(output_dir, exist_ok=True)
 
