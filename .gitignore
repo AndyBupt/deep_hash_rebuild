@@ -4,7 +4,6 @@ checkpoints/
 *.pt
 
 # 评估结果图片
-results/
 
 # Python 缓存
 __pycache__/

@@ -375,13 +375,15 @@ def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
     # G-S 曲线（用最大G，对应论文 Fig.9/10）
     best_G = max([G for G in G_values if G % 8 == 0], default=G_values[-1])
     ctm_best = CTM(hash_dim=1024, G=best_G)
-    # K_values: 信息符号数，安全性 k=K*8 bits
-    # 论文: k ∈ {56, 80, 104} bits → K ∈ {7, 10, 13}
-    K_values = [k for k in [7, 10, 13, 15] if best_G // 8 > k]
+    # K_values: 扩展范围，覆盖 GAR 从100%下降到0%的完整区间
+    # N = best_G // 8，K 必须 < N
+    # 目标: 找到 GAR 开始下降的点（约 K=39）和完全失败的点（约 K=58）
+    N = best_G // 8
+    K_values = [k for k in range(7, N) if k % 2 == 1]  # 奇数K，步长2，覆盖完整范围
     if K_values:
-        print(f"\n绘制 G-S 曲线 (G={best_G})...")
+        print(f"\n绘制完整 G-S 曲线 (G={best_G}, K从7到{K_values[-1]})...")
         plot_gs_curve(codes, labels, ctm_best, K_values,
-                      save_path=os.path.join(output_dir, f"gs_curve_G{best_G}.png"))
+                      save_path=os.path.join(output_dir, f"gs_curve_G{best_G}_full.png"))
 
     return results
 

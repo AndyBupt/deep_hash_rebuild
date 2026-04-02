@@ -1,0 +1,326 @@
+"""
+分析脚本：
+1. 绘制完整 G-S 曲线（K 从小到大，展示 GAR 从100%下降的完整过程）
+2. 分析每个 bit 位置的翻转率，找出稳定比特 vs 不稳定比特
+3. 为改进 CTM 提供数据支撑
+"""
+
+import os
+import numpy as np
+import torch
+import matplotlib
+matplotlib.rcParams['font.family'] = 'Arial Unicode MS'
+import matplotlib.pyplot as plt
+
+from dataset import build_dataloaders, get_transforms
+from model import FingerprintHashNet
+from ctm import CTM
+from sstm import SSTM
+
+
+DATA_ROOT = "fingerprints"
+DB_NAMES = ["DB1_B", "DB2_B", "DB3_B", "DB4_B"]
+OUTPUT_DIR = "results"
+
+
+def load_model_and_data(model_path=None):
+    device = torch.device("mps" if torch.backends.mps.is_available()
+                          else "cuda" if torch.cuda.is_available() else "cpu")
+    print(f"使用设备: {device}")
+
+    train_loader, test_loader, num_classes = build_dataloaders(
+        DATA_ROOT, DB_NAMES, train_ratio=0.7, batch_size=8
+    )
+    model = FingerprintHashNet(num_classes=num_classes, hash_dim=1024, pretrained=False)
+    if model_path and os.path.exists(model_path):
+        model.load_state_dict(torch.load(model_path, map_location=device))
+        print(f"已加载模型: {model_path}")
+    model = model.to(device)
+    model.set_beta(32)
+    return model, train_loader, test_loader, num_classes, device
+
+
+def extract_codes(model, loader, device):
+    """提取所有样本的二值哈希码"""
+    model.eval()
+    all_codes, all_labels = [], []
+    with torch.no_grad():
+        for imgs, labels in loader:
+            imgs = imgs.to(device)
+            _, _, binary = model(imgs)
+            all_codes.append(binary.cpu().numpy())
+            all_labels.append(labels.numpy())
+    return np.vstack(all_codes), np.concatenate(all_labels)
+
+
+# ============================================================
+# 分析一：完整 G-S 曲线
+# ============================================================
+def plot_full_gs_curve(codes, labels, G=512, output_dir=OUTPUT_DIR):
+    """
+    绘制完整 G-S 曲线：K 从 7 到 N-1，展示 GAR 从 100% 下降到 0% 的完整过程
+    这是展示"模型不足"的关键图
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    N = G // 8
+    ctm = CTM(hash_dim=1024, G=G)
+
+    # 用较稀疏的 K 采样，避免计算太慢
+    K_list = list(range(7, N, 2))  # 步长2
+    gars_sk = []
+    print(f"\n计算完整 G-S 曲线 (G={G}, N={N}, K从7到{K_list[-1]})...")
+
+    for K in K_list:
+        sstm = SSTM(G=G, K=K)
+        # 只算 stolen key 场景的 genuine GAR
+        unique_ids = np.unique(labels)
+        pass_count = total = 0
+        for uid in unique_ids:
+            idx = np.where(labels == uid)[0]
+            if len(idx) < 2:
+                continue
+            re, ke = ctm.enroll(codes[idx[0]])
+            stored_hash, _ = sstm.enroll(re)
+            for i in idx[1:]:
+                rp = ctm.authenticate(codes[i], ke)
+                is_genuine, _ = sstm.authenticate(rp, stored_hash)
+                pass_count += int(is_genuine)
+                total += 1
+        gar = pass_count / total * 100 if total > 0 else 0
+        gars_sk.append(gar)
+        k_bits = K * 8
+        print(f"  K={K:3d} (k={k_bits:4d} bits): GAR={gar:.1f}%")
+
+    k_bits_list = [K * 8 for K in K_list]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(k_bits_list, gars_sk, 'b-o', linewidth=2, markersize=4)
+    ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
+    ax.set_xlabel('安全性 k (bits)')
+    ax.set_ylabel('GAR (%)')
+    ax.set_title(f'完整 G-S 曲线 (G={G} bits) — 随机比特选择（基线）')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(-5, 105)
+
+    # 标注 GAR=50% 对应的 k 值
+    for i, (k, gar) in enumerate(zip(k_bits_list, gars_sk)):
+        if gar < 50 and i > 0 and gars_sk[i-1] >= 50:
+            ax.axvline(x=k, color='red', linestyle=':', alpha=0.7)
+            ax.annotate(f'k={k}bits\nGAR开始<50%',
+                        xy=(k, 50), xytext=(k+20, 60),
+                        arrowprops=dict(arrowstyle='->', color='red'),
+                        color='red', fontsize=9)
+
+    save_path = os.path.join(output_dir, f"gs_curve_G{G}_baseline_full.png")
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"完整G-S曲线已保存: {save_path}")
+    plt.show()
+    return K_list, gars_sk
+
+
+# ============================================================
+# 分析二：每个 bit 位置的翻转率
+# ============================================================
+def analyze_bit_flip_rates(codes, labels, output_dir=OUTPUT_DIR):
+    """
+    分析每个 bit 位置的翻转率（稳定性）
+
+    翻转率计算方法：
+    对于每个身份 uid，取其所有样本的二值码，
+    计算每个 bit 位置上"与该用户众数不同"的概率
+    → 翻转率越低，该位置越稳定
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    unique_ids = np.unique(labels)
+    hash_dim = codes.shape[1]
+
+    # 收集每个 bit 位置的翻转统计
+    flip_counts = np.zeros(hash_dim)
+    total_pairs = np.zeros(hash_dim)
+
+    for uid in unique_ids:
+        idx = np.where(labels == uid)[0]
+        if len(idx) < 2:
+            continue
+        user_codes = codes[idx]  # (n_samples, hash_dim)
+        user_codes_01 = (user_codes > 0).astype(float)
+
+        # 每个位置的众数（0 或 1）
+        majority = (user_codes_01.mean(axis=0) >= 0.5).astype(float)
+
+        # 每个样本与众数不同的次数
+        for code in user_codes_01:
+            flip_counts += (code != majority)
+            total_pairs += 1
+
+    # 每个位置的翻转率
+    flip_rate = flip_counts / np.maximum(total_pairs, 1)
+
+    print(f"\n=== Bit 翻转率统计 ===")
+    print(f"总 bit 数: {hash_dim}")
+    print(f"翻转率均值: {flip_rate.mean():.4f} ({flip_rate.mean()*100:.2f}%)")
+    print(f"翻转率中位数: {np.median(flip_rate):.4f}")
+    print(f"翻转率 < 5%  的 bit 数: {(flip_rate < 0.05).sum()} ({(flip_rate < 0.05).mean()*100:.1f}%)")
+    print(f"翻转率 < 10% 的 bit 数: {(flip_rate < 0.10).sum()} ({(flip_rate < 0.10).mean()*100:.1f}%)")
+    print(f"翻转率 < 20% 的 bit 数: {(flip_rate < 0.20).sum()} ({(flip_rate < 0.20).mean()*100:.1f}%)")
+    print(f"翻转率 > 40% 的 bit 数: {(flip_rate > 0.40).sum()} ({(flip_rate > 0.40).mean()*100:.1f}%)")
+
+    # 绘制翻转率分布图
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # 左图：翻转率直方图
+    axes[0].hist(flip_rate, bins=50, color='steelblue', edgecolor='white', alpha=0.8)
+    axes[0].axvline(x=flip_rate.mean(), color='red', linestyle='--',
+                    label=f'均值={flip_rate.mean()*100:.1f}%')
+    axes[0].axvline(x=0.05, color='green', linestyle=':', label='5% 阈值')
+    axes[0].set_xlabel('翻转率')
+    axes[0].set_ylabel('bit 数量')
+    axes[0].set_title('各 bit 位置翻转率分布')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    # 右图：按翻转率排序的 bit 位置（稳定性图）
+    sorted_flip = np.sort(flip_rate)
+    axes[1].plot(range(hash_dim), sorted_flip, 'b-', linewidth=1)
+    axes[1].axhline(y=0.05, color='green', linestyle='--', label='5% 阈值')
+    axes[1].axhline(y=0.10, color='orange', linestyle='--', label='10% 阈值')
+    axes[1].axhline(y=flip_rate.mean(), color='red', linestyle='--',
+                    label=f'均值={flip_rate.mean()*100:.1f}%')
+    n_stable = (flip_rate < 0.10).sum()
+    axes[1].axvline(x=n_stable, color='orange', linestyle=':',
+                    label=f'前{n_stable}个bit翻转率<10%')
+    axes[1].set_xlabel('bit 位置（按翻转率排序）')
+    axes[1].set_ylabel('翻转率')
+    axes[1].set_title('bit 稳定性排序（改进CTM的依据）')
+    axes[1].legend(fontsize=8)
+    axes[1].grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    save_path = os.path.join(output_dir, "bit_flip_rate_analysis.png")
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"翻转率分析图已保存: {save_path}")
+    plt.show()
+
+    return flip_rate
+
+
+# ============================================================
+# 分析三：稳定比特 vs 随机比特 的 Genuine 汉明距离对比
+# ============================================================
+def compare_stable_vs_random(codes, labels, flip_rate, G=512, output_dir=OUTPUT_DIR):
+    """
+    对比两种比特选择策略下的 Genuine 汉明距离分布：
+    1. 随机选 G 个 bit（论文基线）
+    2. 选翻转率最低的 G 个 bit（改进方案）
+
+    目的：展示稳定比特选择能显著降低 Genuine 翻转数
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 策略1：随机选 G 个 bit
+    rng = np.random.default_rng(42)
+    random_indices = rng.choice(len(flip_rate), size=G, replace=False)
+    random_indices = np.sort(random_indices)
+
+    # 策略2：选翻转率最低的 G 个 bit
+    stable_indices = np.argsort(flip_rate)[:G]
+    stable_indices = np.sort(stable_indices)
+
+    print(f"\n=== 比特选择策略对比 (G={G}) ===")
+    print(f"随机选择: 平均翻转率={flip_rate[random_indices].mean()*100:.2f}%")
+    print(f"稳定选择: 平均翻转率={flip_rate[stable_indices].mean()*100:.2f}%")
+
+    # 计算两种策略下的 Genuine 汉明距离
+    def compute_genuine_dists(indices):
+        dists = []
+        unique_ids = np.unique(labels)
+        for uid in unique_ids:
+            idx = np.where(labels == uid)[0]
+            if len(idx) < 2:
+                continue
+            ref = codes[idx[0]][indices]
+            for i in idx[1:]:
+                probe = codes[i][indices]
+                d = np.sum((ref > 0) != (probe > 0)) / len(indices)
+                dists.append(d)
+        return np.array(dists)
+
+    dists_random = compute_genuine_dists(random_indices)
+    dists_stable = compute_genuine_dists(stable_indices)
+
+    print(f"\nGenuine 汉明距离（归一化）:")
+    print(f"  随机选择: 均值={dists_random.mean():.4f} ({dists_random.mean()*100:.1f}%), "
+          f"std={dists_random.std():.4f}")
+    print(f"  稳定选择: 均值={dists_stable.mean():.4f} ({dists_stable.mean()*100:.1f}%), "
+          f"std={dists_stable.std():.4f}")
+    print(f"  改善幅度: {(dists_random.mean() - dists_stable.mean())*100:.1f}% 翻转率降低")
+
+    # 绘制对比图
+    from scipy.stats import norm as scipy_norm
+    fig, ax = plt.subplots(figsize=(9, 5))
+    x = np.linspace(0, 0.6, 300)
+
+    g_mean, g_std = dists_random.mean(), dists_random.std()
+    s_mean, s_std = dists_stable.mean(), dists_stable.std()
+
+    ax.plot(x, scipy_norm.pdf(x, g_mean, g_std), 'r-', linewidth=2,
+            label=f'随机选择（基线）: 均值={g_mean*100:.1f}%')
+    ax.plot(x, scipy_norm.pdf(x, s_mean, s_std), 'b-', linewidth=2,
+            label=f'稳定比特选择（改进）: 均值={s_mean*100:.1f}%')
+    ax.fill_between(x, scipy_norm.pdf(x, g_mean, g_std), alpha=0.15, color='red')
+    ax.fill_between(x, scipy_norm.pdf(x, s_mean, s_std), alpha=0.15, color='blue')
+
+    ax.set_xlabel('Genuine 归一化汉明距离（翻转率）')
+    ax.set_ylabel('概率密度')
+    ax.set_title(f'比特选择策略对比 (G={G}) — Genuine 翻转率分布')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    save_path = os.path.join(output_dir, f"compare_selection_G{G}.png")
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"对比图已保存: {save_path}")
+    plt.show()
+
+    return dists_random, dists_stable, stable_indices
+
+
+if __name__ == "__main__":
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # 加载模型和数据
+    model_path = "checkpoints/final_model.pth"
+    model, train_loader, test_loader, num_classes, device = load_model_and_data(model_path)
+
+    # 提取训练集和测试集的二值码
+    print("\n提取训练集二值码（用于分析翻转率）...")
+    train_codes, train_labels = extract_codes(model, train_loader, device)
+    print(f"训练集: {train_codes.shape}")
+
+    print("\n提取测试集二值码（用于评估）...")
+    test_codes, test_labels = extract_codes(model, test_loader, device)
+    print(f"测试集: {test_codes.shape}")
+
+    # 分析一：完整 G-S 曲线（展示基线的不足）
+    print("\n" + "="*50)
+    print("分析一：完整 G-S 曲线")
+    K_list, gars = plot_full_gs_curve(test_codes, test_labels, G=512)
+
+    # 分析二：bit 翻转率分析（为改进提供依据）
+    print("\n" + "="*50)
+    print("分析二：bit 翻转率分析")
+    flip_rate = analyze_bit_flip_rates(train_codes, train_labels)
+
+    # 分析三：稳定比特 vs 随机比特对比
+    print("\n" + "="*50)
+    print("分析三：稳定比特选择 vs 随机比特选择")
+    dists_random, dists_stable, stable_indices = compare_stable_vs_random(
+        test_codes, test_labels, flip_rate, G=512
+    )
+
+    print("\n" + "="*50)
+    print("分析完成！结果保存在 results/ 目录")
+    print("生成的图表：")
+    print("  - gs_curve_G512_baseline_full.png  完整G-S曲线（展示不足）")
+    print("  - bit_flip_rate_analysis.png        bit翻转率分析（改进依据）")
+    print("  - compare_selection_G512.png        两种选择策略对比（改进效果预览）")
