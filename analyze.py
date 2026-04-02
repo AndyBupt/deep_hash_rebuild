@@ -285,6 +285,105 @@ def compare_stable_vs_random(codes, labels, flip_rate, G=512, output_dir=OUTPUT_
     return dists_random, dists_stable, stable_indices
 
 
+# ============================================================
+# 分析四：基线 vs 改进 G-S 曲线对比（核心对比实验）
+# ============================================================
+def compare_gs_curves(test_codes, test_labels, flip_rate, G=512, output_dir=OUTPUT_DIR):
+    """
+    对比基线（随机比特选择）和改进（稳定比特选择）的完整 G-S 曲线
+
+    K 范围需要覆盖两条曲线的下降区间：
+      - 基线拐点约在 K=39 (k≈312 bits)
+      - 改进拐点约在 K=55+ (k≈440+ bits)
+    所以 K 范围取 7~63，步长 2
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    N = G // 8  # 64 symbols for G=512
+    K_list = list(range(7, N, 2))  # step=2, covers K=7..63
+
+    # --- 基线 CTM（随机选择）---
+    ctm_baseline = CTM(hash_dim=1024, G=G)
+    gars_baseline = []
+    print(f"\nComputing baseline G-S curve (G={G}, K from 7 to {K_list[-1]})...")
+    for K in K_list:
+        sstm = SSTM(G=G, K=K)
+        unique_ids = np.unique(test_labels)
+        pass_count = total = 0
+        for uid in unique_ids:
+            idx = np.where(test_labels == uid)[0]
+            if len(idx) < 2:
+                continue
+            re, ke = ctm_baseline.enroll(test_codes[idx[0]])
+            stored_hash, _ = sstm.enroll(re)
+            for i in idx[1:]:
+                rp = ctm_baseline.authenticate(test_codes[i], ke)
+                is_genuine, _ = sstm.authenticate(rp, stored_hash)
+                pass_count += int(is_genuine)
+                total += 1
+        gar = pass_count / total * 100 if total > 0 else 0
+        gars_baseline.append(gar)
+        print(f"  Baseline  K={K:3d} (k={K*8:4d} bits): GAR={gar:.1f}%")
+
+    # --- 改进 CTM（稳定比特选择）---
+    ctm_stable = StableCTM(hash_dim=1024, G=G, flip_rate=flip_rate, stable_ratio=0.3)
+    gars_stable = []
+    print(f"\nComputing improved G-S curve (Stable-Bit CTM)...")
+    for K in K_list:
+        sstm = SSTM(G=G, K=K)
+        unique_ids = np.unique(test_labels)
+        pass_count = total = 0
+        for uid in unique_ids:
+            idx = np.where(test_labels == uid)[0]
+            if len(idx) < 2:
+                continue
+            re, ke = ctm_stable.enroll(test_codes[idx[0]])
+            stored_hash, _ = sstm.enroll(re)
+            for i in idx[1:]:
+                rp = ctm_stable.authenticate(test_codes[i], ke)
+                is_genuine, _ = sstm.authenticate(rp, stored_hash)
+                pass_count += int(is_genuine)
+                total += 1
+        gar = pass_count / total * 100 if total > 0 else 0
+        gars_stable.append(gar)
+        print(f"  Improved  K={K:3d} (k={K*8:4d} bits): GAR={gar:.1f}%")
+
+    # --- 绘制对比图 ---
+    k_bits_list = [K * 8 for K in K_list]
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    ax.plot(k_bits_list, gars_baseline, 'r-o', linewidth=2, markersize=4,
+            label='Baseline (Random Bit Selection)')
+    ax.plot(k_bits_list, gars_stable, 'b-s', linewidth=2, markersize=4,
+            label='Improved (Stable Bit Selection)')
+
+    ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
+    ax.set_xlabel('Security Level k (bits)')
+    ax.set_ylabel('GAR (%)')
+    ax.set_title(f'G-S Curve Comparison: Baseline vs. Improved CTM (G={G} bits)')
+    ax.legend(fontsize=11)
+    ax.grid(True, alpha=0.3)
+    ax.set_ylim(-5, 108)
+
+    # 标注两条曲线的拐点
+    for label, gars, color in [('Baseline', gars_baseline, 'red'),
+                                ('Improved', gars_stable, 'blue')]:
+        for i, (k, gar) in enumerate(zip(k_bits_list, gars)):
+            if gar < 50 and i > 0 and gars[i-1] >= 50:
+                ax.axvline(x=k, color=color, linestyle=':', alpha=0.6)
+                offset = 15 if label == 'Baseline' else -80
+                ax.annotate(f'{label}\nk={k}b',
+                            xy=(k, 50), xytext=(k + offset, 62),
+                            arrowprops=dict(arrowstyle='->', color=color),
+                            color=color, fontsize=8)
+                break
+
+    save_path = os.path.join(output_dir, f"gs_comparison_G{G}.png")
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"\nComparison G-S curve saved: {save_path}")
+    plt.show()
+    return K_list, gars_baseline, gars_stable
+
+
 if __name__ == "__main__":
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -293,34 +392,36 @@ if __name__ == "__main__":
     model, train_loader, test_loader, num_classes, device = load_model_and_data(model_path)
 
     # 提取训练集和测试集的二值码
-    print("\n提取训练集二值码（用于分析翻转率）...")
+    print("\nExtracting training set binary codes (for flip rate analysis)...")
     train_codes, train_labels = extract_codes(model, train_loader, device)
-    print(f"训练集: {train_codes.shape}")
+    print(f"Training set: {train_codes.shape}")
 
-    print("\n提取测试集二值码（用于评估）...")
+    print("\nExtracting test set binary codes (for evaluation)...")
     test_codes, test_labels = extract_codes(model, test_loader, device)
-    print(f"测试集: {test_codes.shape}")
+    print(f"Test set: {test_codes.shape}")
 
-    # 分析一：完整 G-S 曲线（展示基线的不足）
+    # 分析一：bit 翻转率分析（为改进提供依据）
     print("\n" + "="*50)
-    print("分析一：完整 G-S 曲线")
-    K_list, gars = plot_full_gs_curve(test_codes, test_labels, G=512)
-
-    # 分析二：bit 翻转率分析（为改进提供依据）
-    print("\n" + "="*50)
-    print("分析二：bit 翻转率分析")
+    print("Analysis 1: Bit Flip Rate Analysis")
     flip_rate = analyze_bit_flip_rates(train_codes, train_labels)
 
-    # 分析三：稳定比特 vs 随机比特对比
+    # 分析二：稳定比特 vs 随机比特 Genuine 汉明距离对比
     print("\n" + "="*50)
-    print("分析三：稳定比特选择 vs 随机比特选择")
+    print("Analysis 2: Stable Bit vs. Random Bit Selection")
     dists_random, dists_stable, stable_indices = compare_stable_vs_random(
         test_codes, test_labels, flip_rate, G=512
     )
 
+    # 分析三：核心对比实验 — 完整 G-S 曲线（基线 vs 改进）
     print("\n" + "="*50)
-    print("分析完成！结果保存在 results/ 目录")
-    print("生成的图表：")
-    print("  - gs_curve_G512_baseline_full.png  完整G-S曲线（展示不足）")
-    print("  - bit_flip_rate_analysis.png        bit翻转率分析（改进依据）")
-    print("  - compare_selection_G512.png        两种选择策略对比（改进效果预览）")
+    print("Analysis 3: G-S Curve Comparison (Baseline vs. Improved CTM)")
+    K_list, gars_baseline, gars_stable = compare_gs_curves(
+        test_codes, test_labels, flip_rate, G=512
+    )
+
+    print("\n" + "="*50)
+    print("Analysis complete! Results saved to results/ directory")
+    print("Generated figures:")
+    print("  - bit_flip_rate_analysis.png   Bit flip rate analysis")
+    print("  - compare_selection_G512.png   Genuine flip rate distribution comparison")
+    print("  - gs_comparison_G512.png       G-S curve: Baseline vs. Improved (KEY FIGURE)")

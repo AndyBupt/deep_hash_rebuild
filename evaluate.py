@@ -1,37 +1,36 @@
 """
-评估脚本
-对应论文 Section V 和 Section VI
+Evaluation Script
+Corresponds to Paper Section V and Section VI
 
-评估指标:
-  - EER (Equal Error Rate，等错误率)
+Metrics:
+  - EER (Equal Error Rate)
   - GAR@FAR (Genuine Accept Rate at given False Accept Rate)
-  - ROC 曲线
-  - Genuine/Impostor 汉明距离分布
-  - G-S 曲线（GAR vs 安全性 bits）
+  - ROC Curve
+  - Genuine/Impostor Hamming Distance Distribution
+  - G-S Curve (GAR vs. Security Level in bits)
+  - Comparison: Baseline CTM vs. Improved StableCTM
 """
 
 import os
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-import matplotlib
-matplotlib.rcParams['font.family'] = 'Arial Unicode MS'  # macOS 中文支持
 
 from sklearn.metrics import roc_curve, auc
 from scipy.stats import norm
 
-from dataset import build_dataloaders, get_transforms
+from dataset import build_dataloaders
 from model import FingerprintHashNet
-from ctm import CTM
+from ctm import CTM, StableCTM
 from sstm import SSTM
 
 
 def extract_all_binary_codes(model, loader, device):
     """
-    提取所有测试样本的二值哈希码和标签
+    Extract binary hash codes and labels from all test samples.
 
     Returns:
-        codes: (N, hash_dim) numpy array，值为 {-1, +1}
+        codes: (N, hash_dim) numpy array, values in {-1, +1}
         labels: (N,) numpy array
     """
     model.eval()
@@ -52,21 +51,21 @@ def extract_all_binary_codes(model, loader, device):
 
 def compute_genuine_impostor_distances(codes, labels, ctm, scenario="unknown_key"):
     """
-    计算所有 genuine pair 和 impostor pair 的汉明距离
+    Compute Hamming distances for all genuine pairs and impostor pairs.
 
-    对应论文 Section V-B 的两种场景:
-      unknown_key: impostor 不知道 genuine 的密钥，使用随机密钥
-      stolen_key:  impostor 知道 genuine 的密钥，但提交自己的生物特征
+    Corresponds to Paper Section V-B, two scenarios:
+      unknown_key: impostor uses a random key + own biometrics
+      stolen_key:  impostor uses the genuine user's key + own biometrics
 
     Args:
-        scenario: "unknown_key" 或 "stolen_key"
+        scenario: "unknown_key" or "stolen_key"
     """
     genuine_dists = []
     impostor_dists = []
     unique_ids = np.unique(labels)
     rng = np.random.default_rng(42)
 
-    # Genuine pairs: 同一身份内，用第一个样本注册，其余样本认证
+    # Genuine pairs: enroll with first sample, authenticate with the rest
     for uid in unique_ids:
         idx = np.where(labels == uid)[0]
         if len(idx) < 2:
@@ -80,43 +79,36 @@ def compute_genuine_impostor_distances(codes, labels, ctm, scenario="unknown_key
     n_impostors = min(len(genuine_dists) * 5, 2000)
 
     if scenario == "unknown_key":
-        # Unknown key 场景: impostor 用随机密钥 + 自己的生物特征
-        # 论文: "The impostor tries to present random indices for random-bit selection"
+        # Unknown key: impostor uses random indices for bit selection
         for _ in range(n_impostors):
             id1, id2 = rng.choice(unique_ids, size=2, replace=False)
             idx1 = rng.choice(np.where(labels == id1)[0])
             idx2 = rng.choice(np.where(labels == id2)[0])
-            # id1 注册（生成密钥），但 id2 用随机密钥认证（不知道 id1 的密钥）
             re, ke_genuine = ctm.enroll(codes[idx1], seed=int(idx1))
             _, ke_random = ctm.enroll(codes[idx2], seed=int(rng.integers(0, 99999)))
-            rp = ctm.authenticate(codes[idx2], ke_random)  # 随机密钥
+            rp = ctm.authenticate(codes[idx2], ke_random)
             d = ctm.hamming_distance(re, rp)
             impostor_dists.append(d / ctm.G)
 
     elif scenario == "stolen_key":
-        # Stolen key 场景: impostor 知道 genuine 的密钥，但提交自己的生物特征
-        # 论文: "the impostor has access to the actual key of the genuine user
-        #        and tries to break the system by presenting actual key with impostor biometrics"
+        # Stolen key: impostor knows the genuine user's key but uses own biometrics
         for _ in range(n_impostors):
             id1, id2 = rng.choice(unique_ids, size=2, replace=False)
             idx1 = rng.choice(np.where(labels == id1)[0])
             idx2 = rng.choice(np.where(labels == id2)[0])
-            re, ke_genuine = ctm.enroll(codes[idx1])  # id1 的密钥
-            rp = ctm.authenticate(codes[idx2], ke_genuine)  # 用 id1 的密钥，但 id2 的特征
+            re, ke_genuine = ctm.enroll(codes[idx1])
+            rp = ctm.authenticate(codes[idx2], ke_genuine)
             d = ctm.hamming_distance(re, rp)
             impostor_dists.append(d / ctm.G)
 
     else:
-        raise ValueError(f"scenario 必须是 'unknown_key' 或 'stolen_key'，得到: {scenario}")
+        raise ValueError(f"scenario must be 'unknown_key' or 'stolen_key', got: {scenario}")
 
     return np.array(genuine_dists), np.array(impostor_dists)
 
 
 def compute_eer(genuine_dists, impostor_dists):
-    """计算 EER（等错误率）"""
-    # 将距离转为相似度（距离越小越相似）
-    # genuine: 距离小 → 相似度高 → 标签1
-    # impostor: 距离大 → 相似度低 → 标签0
+    """Compute Equal Error Rate (EER)."""
     scores = np.concatenate([-genuine_dists, -impostor_dists])
     y_true = np.concatenate([np.ones(len(genuine_dists)),
                               np.zeros(len(impostor_dists))])
@@ -124,7 +116,6 @@ def compute_eer(genuine_dists, impostor_dists):
     fpr, tpr, thresholds = roc_curve(y_true, scores)
     fnr = 1 - tpr
 
-    # EER: FPR == FNR 的点
     eer_idx = np.argmin(np.abs(fpr - fnr))
     eer = (fpr[eer_idx] + fnr[eer_idx]) / 2
 
@@ -132,7 +123,7 @@ def compute_eer(genuine_dists, impostor_dists):
 
 
 def compute_gar_at_far(fpr, tpr, target_far=0.005):
-    """计算指定 FAR 下的 GAR"""
+    """Compute GAR at a given FAR."""
     idx = np.searchsorted(fpr, target_far)
     if idx >= len(tpr):
         return tpr[-1]
@@ -142,8 +133,8 @@ def compute_gar_at_far(fpr, tpr, target_far=0.005):
 def plot_distributions(genuine_dists, impostor_uk_dists, impostor_sk_dists,
                        G, save_path=None):
     """
-    绘制 Genuine/Impostor 汉明距离分布（对应论文 Fig.4）
-    同时展示 unknown key 和 stolen key 两种场景的 impostor 分布
+    Plot Genuine/Impostor Hamming distance distributions (Paper Fig.4).
+    Shows both unknown key and stolen key impostor distributions.
     """
     fig, ax = plt.subplots(figsize=(9, 5))
     x = np.linspace(0, 1, 300)
@@ -153,29 +144,31 @@ def plot_distributions(genuine_dists, impostor_uk_dists, impostor_sk_dists,
     sk_mean, sk_std = impostor_sk_dists.mean(), impostor_sk_dists.std()
 
     ax.plot(x, norm.pdf(x, g_mean, g_std),  'b-', linewidth=2, label='Genuine')
-    ax.plot(x, norm.pdf(x, uk_mean, uk_std), 'r-', linewidth=2, label='Impostor (Unknown Key)')
-    ax.plot(x, norm.pdf(x, sk_mean, sk_std), 'g--', linewidth=2, label='Impostor (Stolen Key)')
+    ax.plot(x, norm.pdf(x, uk_mean, uk_std), 'r-', linewidth=2,
+            label='Impostor (Unknown Key)')
+    ax.plot(x, norm.pdf(x, sk_mean, sk_std), 'g--', linewidth=2,
+            label='Impostor (Stolen Key)')
     ax.fill_between(x, norm.pdf(x, g_mean, g_std),  alpha=0.15, color='blue')
     ax.fill_between(x, norm.pdf(x, uk_mean, uk_std), alpha=0.15, color='red')
     ax.fill_between(x, norm.pdf(x, sk_mean, sk_std), alpha=0.15, color='green')
 
-    ax.set_xlabel('归一化汉明距离')
-    ax.set_ylabel('概率密度')
-    ax.set_title(f'Genuine/Impostor 分布 (G={G})')
+    ax.set_xlabel('Normalized Hamming Distance')
+    ax.set_ylabel('Probability Density')
+    ax.set_title(f'Genuine/Impostor Distribution (G={G})')
     ax.legend()
     ax.grid(True, alpha=0.3)
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"分布图已保存: {save_path}")
+        print(f"Distribution plot saved: {save_path}")
     plt.show()
 
 
 def plot_roc(fpr_uk, tpr_uk, eer_uk, fpr_sk, tpr_sk, eer_sk,
              G, save_path=None):
     """
-    绘制 ROC 曲线（对应论文 Fig.7/8）
-    同时展示 unknown key 和 stolen key 两种场景
+    Plot ROC curves (Paper Fig.7/8).
+    Shows both unknown key and stolen key scenarios.
     """
     fig, ax = plt.subplots(figsize=(7, 6))
     auc_uk = auc(fpr_uk, tpr_uk)
@@ -187,18 +180,18 @@ def plot_roc(fpr_uk, tpr_uk, eer_uk, fpr_sk, tpr_sk, eer_sk,
     ax.plot([0, 1], [0, 1], 'k--', alpha=0.4)
     ax.set_xlabel('FAR (False Accept Rate)')
     ax.set_ylabel('GAR (Genuine Accept Rate)')
-    ax.set_title(f'ROC 曲线 (G={G})')
+    ax.set_title(f'ROC Curve (G={G})')
     ax.legend()
     ax.grid(True, alpha=0.3)
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"ROC图已保存: {save_path}")
+        print(f"ROC curve saved: {save_path}")
     plt.show()
 
 
 def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
-    """辅助函数：用 SSTM 计算指定场景下的 GAR"""
+    """Helper: compute GAR using SSTM for a given scenario."""
     unique_ids = np.unique(labels)
     rng = np.random.default_rng(42)
     pass_count = total = 0
@@ -210,12 +203,10 @@ def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
         stored_hash, _ = sstm.enroll(re)
         for i in idx[1:]:
             if scenario == "unknown_key":
-                # impostor 用随机密钥
                 _, ke_rand = ctm.enroll(codes[i],
                                         seed=int(rng.integers(0, 99999)))
                 rp = ctm.authenticate(codes[i], ke_rand)
             else:
-                # genuine probe: 用注册密钥
                 rp = ctm.authenticate(codes[i], ke)
             is_genuine, _ = sstm.authenticate(rp, stored_hash)
             pass_count += int(is_genuine)
@@ -223,70 +214,101 @@ def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
     return pass_count / total if total > 0 else 0
 
 
-def plot_gs_curve(codes, labels, ctm, K_values, save_path=None):
+def plot_gs_curve_comparison(codes, labels, ctm_baseline, ctm_improved,
+                              K_values, G, save_path=None):
     """
-    绘制 G-S 曲线（GAR vs 安全性 bits）（对应论文 Fig.9/10）
-    同时展示 unknown key 和 stolen key 两种场景
+    Plot G-S curves comparing Baseline CTM vs. Improved StableCTM.
+    K range should cover both inflection points.
 
     Args:
-        K_values: RS 信息符号数列表，安全性 k = K*8 bits
-                  论文实验: K ∈ {7,10,13,15} → k ∈ {56,80,104,120} bits
+        ctm_baseline: original CTM (random bit selection)
+        ctm_improved: StableCTM (stable bit selection), or None to skip
+        K_values: list of RS symbol counts, security = K*8 bits
     """
-    gars_uk = []
-    gars_sk = []
     k_bits_list = [K * 8 for K in K_values]
+    gars_baseline = []
+    gars_improved = [] if ctm_improved is not None else None
 
+    print(f"\nComputing Baseline G-S curve (G={G})...")
     for K in K_values:
-        k = K * 8
-        # G 必须是8的倍数，且 N=G//8 > K
-        if ctm.G % 8 != 0 or ctm.G // 8 <= K:
-            gars_uk.append(0)
-            gars_sk.append(0)
-            print(f"  K={K} (k={k} bits): 跳过（G={ctm.G}不满足条件）")
+        if G % 8 != 0 or G // 8 <= K:
+            gars_baseline.append(0)
+            if gars_improved is not None:
+                gars_improved.append(0)
             continue
-        sstm = SSTM(G=ctm.G, K=K)
+        sstm = SSTM(G=G, K=K)
+        gar = _compute_gar_with_sstm(codes, labels, ctm_baseline, sstm,
+                                      scenario="stolen_key")
+        gars_baseline.append(gar * 100)
+        print(f"  Baseline  K={K:3d} (k={K*8:4d} bits): GAR={gar*100:.1f}%")
 
-        # Genuine（stolen key场景中genuine用自己密钥，等价于正常认证）
-        gar_genuine = _compute_gar_with_sstm(codes, labels, ctm, sstm,
-                                              scenario="stolen_key")
-        gar_uk = _compute_gar_with_sstm(codes, labels, ctm, sstm,
-                                         scenario="unknown_key")
-        gars_sk.append(gar_genuine * 100)
-        gars_uk.append(gar_uk * 100)
-        print(f"  K={K} (k={k} bits): GAR(genuine)={gar_genuine*100:.1f}%  "
-              f"GAR(unknown_key_impostor)={gar_uk*100:.1f}%")
+    if ctm_improved is not None:
+        print(f"\nComputing Improved G-S curve (StableCTM)...")
+        for K in K_values:
+            if G % 8 != 0 or G // 8 <= K:
+                gars_improved.append(0)
+                continue
+            sstm = SSTM(G=G, K=K)
+            gar = _compute_gar_with_sstm(codes, labels, ctm_improved, sstm,
+                                          scenario="stolen_key")
+            gars_improved.append(gar * 100)
+            print(f"  Improved  K={K:3d} (k={K*8:4d} bits): GAR={gar*100:.1f}%")
 
-    fig, ax = plt.subplots(figsize=(7, 5))
-    ax.plot(k_bits_list, gars_sk, 'b-o', linewidth=2, label='Stolen Key (Genuine)')
-    ax.plot(k_bits_list, gars_uk, 'r--s', linewidth=2, label='Unknown Key (Genuine)')
-    ax.set_xlabel('安全性 k (bits)')
+    # --- Plot ---
+    fig, ax = plt.subplots(figsize=(11, 6))
+    ax.plot(k_bits_list, gars_baseline, 'r-o', linewidth=2, markersize=4,
+            label='Baseline (Random Bit Selection)')
+    if gars_improved is not None:
+        ax.plot(k_bits_list, gars_improved, 'b-s', linewidth=2, markersize=4,
+                label='Improved (Stable Bit Selection)')
+
+    ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
+    ax.set_xlabel('Security Level k (bits)')
     ax.set_ylabel('GAR (%)')
-    ax.set_title(f'G-S 曲线 (G={ctm.G} bits)')
-    ax.legend()
+    title = f'G-S Curve: Baseline vs. Improved CTM (G={G} bits)'
+    if ctm_improved is None:
+        title = f'G-S Curve: Baseline CTM (G={G} bits)'
+    ax.set_title(title)
+    ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
-    ax.set_ylim(0, 105)
+    ax.set_ylim(-5, 108)
+
+    # Annotate inflection points
+    for label_str, gars, color in [('Baseline', gars_baseline, 'red'),
+                                    ('Improved', gars_improved or [], 'blue')]:
+        for i, (k, gar) in enumerate(zip(k_bits_list, gars)):
+            if gar < 50 and i > 0 and gars[i-1] >= 50:
+                ax.axvline(x=k, color=color, linestyle=':', alpha=0.6)
+                offset = 15 if label_str == 'Baseline' else -90
+                ax.annotate(f'{label_str}\nk={k}b',
+                            xy=(k, 50), xytext=(k + offset, 62),
+                            arrowprops=dict(arrowstyle='->', color=color),
+                            color=color, fontsize=8)
+                break
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"G-S曲线已保存: {save_path}")
+        print(f"G-S comparison curve saved: {save_path}")
     plt.show()
-    return k_bits_list, gars_sk, gars_uk
+    return k_bits_list, gars_baseline, gars_improved
 
 
 def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
-                   db_names=None, output_dir="results"):
+                   db_names=None, output_dir="results",
+                   run_comparison=True):
     """
-    完整评估流程
+    Full evaluation pipeline.
 
     Args:
-        model_path: 模型权重路径，None时使用随机初始化（测试流程用）
-        G_values: 测试的随机比特数列表，如 [128, 256, 512, 768]
-        data_root: 数据根目录
-        db_names: 使用的DB列表
-        output_dir: 结果保存目录
+        model_path:      path to model weights; None = random init (for testing)
+        G_values:        list of bit counts to evaluate, e.g. [128, 256, 512]
+        data_root:       data root directory
+        db_names:        list of DB names to use
+        output_dir:      directory to save results
+        run_comparison:  if True, run Baseline vs. Improved G-S comparison
     """
     if G_values is None:
-        G_values = [128, 256, 512, 768]
+        G_values = [128, 256, 512]
     if db_names is None:
         db_names = ["DB1_B", "DB2_B", "DB3_B", "DB4_B"]
 
@@ -294,33 +316,33 @@ def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
 
     device = torch.device("mps" if torch.backends.mps.is_available()
                           else "cuda" if torch.cuda.is_available() else "cpu")
-    print(f"使用设备: {device}")
+    print(f"Device: {device}")
 
-    # 加载数据
-    _, test_loader, num_classes = build_dataloaders(
+    # Load data
+    train_loader, test_loader, num_classes = build_dataloaders(
         data_root, db_names, train_ratio=0.7, batch_size=8
     )
 
-    # 加载模型
+    # Load model
     model = FingerprintHashNet(num_classes=num_classes, hash_dim=1024, pretrained=False)
     if model_path and os.path.exists(model_path):
         model.load_state_dict(torch.load(model_path, map_location=device))
-        print(f"已加载模型: {model_path}")
+        print(f"Model loaded: {model_path}")
     else:
-        print("使用随机初始化模型（仅用于流程验证）")
+        print("Using randomly initialized model (for pipeline testing only)")
     model = model.to(device)
-    model.set_beta(32)  # 推理时使用最大 beta
+    model.set_beta(32)
 
-    # 提取二值码
-    print("\n提取测试集二值哈希码...")
+    # Extract binary codes
+    print("\nExtracting test set binary codes...")
     codes, labels = extract_all_binary_codes(model, test_loader, device)
-    print(f"提取完成: {codes.shape}")
+    print(f"Extracted: {codes.shape}")
 
-    # 对不同 G 值进行评估（两种场景）
+    # --- Part 1: Standard evaluation (Baseline CTM) ---
     results = {}
     for G in G_values:
         print(f"\n{'='*45}")
-        print(f"评估 G={G} bits")
+        print(f"Evaluating G={G} bits")
         ctm = CTM(hash_dim=1024, G=G)
 
         genuine_dists, imp_uk = compute_genuine_impostor_distances(
@@ -330,11 +352,11 @@ def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
             codes, labels, ctm, scenario="stolen_key"
         )
 
-        print(f"  Genuine:           均值={genuine_dists.mean():.3f}, "
+        print(f"  Genuine:       mean={genuine_dists.mean():.3f}, "
               f"std={genuine_dists.std():.3f}")
-        print(f"  Impostor(UK):      均值={imp_uk.mean():.3f}, "
+        print(f"  Impostor(UK):  mean={imp_uk.mean():.3f}, "
               f"std={imp_uk.std():.3f}")
-        print(f"  Impostor(SK):      均值={imp_sk.mean():.3f}, "
+        print(f"  Impostor(SK):  mean={imp_sk.mean():.3f}, "
               f"std={imp_sk.std():.3f}")
 
         eer_uk, fpr_uk, tpr_uk, _ = compute_eer(genuine_dists, imp_uk)
@@ -361,9 +383,9 @@ def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
         plot_roc(fpr_uk, tpr_uk, eer_uk, fpr_sk, tpr_sk, eer_sk, G,
                  save_path=os.path.join(output_dir, f"roc_G{G}.png"))
 
-    # 汇总表（对应论文 Table I 格式）
+    # Summary table (Paper Table I format)
     print("\n" + "="*60)
-    print("汇总结果（对应论文 Table I）:")
+    print("Summary Results (Paper Table I format):")
     print(f"{'G':>6} | {'EER_UK(%)':>10} | {'EER_SK(%)':>10} | "
           f"{'GAR_UK@0.5%':>12} | {'GAR_SK@0.5%':>12}")
     print("-" * 60)
@@ -372,28 +394,56 @@ def run_evaluation(model_path=None, G_values=None, data_root="fingerprints",
         print(f"{G:>6} | {r['eer_uk']*100:>10.2f} | {r['eer_sk']*100:>10.2f} | "
               f"{r['gar_uk']*100:>12.2f} | {r['gar_sk']*100:>12.2f}")
 
-    # G-S 曲线（用最大G，对应论文 Fig.9/10）
+    # --- Part 2: G-S Curve Comparison (Baseline vs. Improved) ---
     best_G = max([G for G in G_values if G % 8 == 0], default=G_values[-1])
-    ctm_best = CTM(hash_dim=1024, G=best_G)
-    # K_values: 扩展范围，覆盖 GAR 从100%下降到0%的完整区间
-    # N = best_G // 8，K 必须 < N
-    # 目标: 找到 GAR 开始下降的点（约 K=39）和完全失败的点（约 K=58）
-    N = best_G // 8
-    K_values = [k for k in range(7, N) if k % 2 == 1]  # 奇数K，步长2，覆盖完整范围
-    if K_values:
-        print(f"\n绘制完整 G-S 曲线 (G={best_G}, K从7到{K_values[-1]})...")
-        plot_gs_curve(codes, labels, ctm_best, K_values,
-                      save_path=os.path.join(output_dir, f"gs_curve_G{best_G}_full.png"))
+    N = best_G // 8  # = 64 for G=512
+
+    # K range: step=2, from 7 to N-1, covers both inflection points
+    # Baseline inflection ~K=39 (k≈312 bits)
+    # Improved inflection ~K=55 (k≈440 bits)
+    K_values = list(range(7, N, 2))
+
+    if run_comparison:
+        # Build flip rate from training set for StableCTM
+        print("\nExtracting training set binary codes (for flip rate)...")
+        train_codes, train_labels = extract_all_binary_codes(model, train_loader, device)
+        flip_rate = StableCTM.compute_flip_rate(train_codes, train_labels)
+        print(f"Flip rate computed: mean={flip_rate.mean()*100:.1f}%")
+
+        ctm_baseline = CTM(hash_dim=1024, G=best_G)
+        ctm_improved = StableCTM(hash_dim=1024, G=best_G,
+                                  flip_rate=flip_rate, stable_ratio=0.3)
+
+        print(f"\nPlotting G-S comparison (G={best_G}, K from 7 to {K_values[-1]})...")
+        plot_gs_curve_comparison(
+            codes, labels,
+            ctm_baseline=ctm_baseline,
+            ctm_improved=ctm_improved,
+            K_values=K_values,
+            G=best_G,
+            save_path=os.path.join(output_dir, f"gs_comparison_G{best_G}.png")
+        )
+    else:
+        # Baseline only
+        ctm_baseline = CTM(hash_dim=1024, G=best_G)
+        print(f"\nPlotting Baseline G-S curve (G={best_G}, K from 7 to {K_values[-1]})...")
+        plot_gs_curve_comparison(
+            codes, labels,
+            ctm_baseline=ctm_baseline,
+            ctm_improved=None,
+            K_values=K_values,
+            G=best_G,
+            save_path=os.path.join(output_dir, f"gs_curve_G{best_G}_full.png")
+        )
 
     return results
 
 
 if __name__ == "__main__":
-    # 如果已有训练好的模型，传入路径；否则用随机初始化验证流程
-    # G 必须是8的倍数（论文实验: 128/256/512/768）
     model_path = "checkpoints/final_model.pth"
     run_evaluation(
         model_path=model_path if os.path.exists(model_path) else None,
         G_values=[128, 256, 512],
-        output_dir="results"
+        output_dir="results",
+        run_comparison=True  # Set to False to skip StableCTM comparison
     )
