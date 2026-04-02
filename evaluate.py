@@ -416,7 +416,7 @@ def run_evaluation(model_path=None, G_values=None, data_root="/root/autodl-tmp/F
 
         ctm_baseline = CTM(hash_dim=1024, G=best_G)
         ctm_improved = StableCTM(hash_dim=1024, G=best_G,
-                                  flip_rate=flip_rate, stable_ratio=0.3)
+                                  flip_rate=flip_rate, stable_ratio=0.8)
 
         print(f"\nPlotting G-S comparison (G={best_G}, K from 7 to {K_values[-1]})...")
         plot_gs_curve_comparison(

@@ -244,7 +244,7 @@ class StableCTM(CTM):
 
     def __init__(self, hash_dim: int = 1024, G: int = 512,
                  flip_rate: Optional[np.ndarray] = None,
-                 stable_ratio: float = 0.3):
+                 stable_ratio: float = 0.8):
         """
         Args:
             hash_dim: 二值向量维度
@@ -252,15 +252,20 @@ class StableCTM(CTM):
             flip_rate: (J,) 每个 bit 位置的翻转率（由训练集统计得到）
                        None 时退化为随机选择（等同于原始 CTM）
             stable_ratio: 稳定 bit 池占总 bit 数的比例
-                          默认 0.3 表示从翻转率最低的 30%（约300个）bit 中选
+                          必须满足 stable_ratio * hash_dim > G，才有随机选择空间
+                          默认 0.8 表示从翻转率最低的 80%（约819个）bit 中选512个
+                          这样稳定池足够大，既保证稳定性又保持可撤销性
         """
         super().__init__(hash_dim=hash_dim, G=G)
         self.flip_rate = flip_rate
         self.stable_ratio = stable_ratio
 
         # 构建稳定 bit 池：翻转率最低的前 stable_ratio 比例的 bit
+        # 关键：稳定池大小必须 > G，否则无法随机选择，失去可撤销性
         if flip_rate is not None:
-            n_stable = max(G, int(hash_dim * stable_ratio))
+            n_stable = int(hash_dim * stable_ratio)
+            # 确保稳定池大于 G，否则扩大到 G+1（保证最低限度的随机性）
+            n_stable = max(n_stable, G + 1)
             self.stable_pool = np.argsort(flip_rate)[:n_stable]
         else:
             self.stable_pool = np.arange(hash_dim)
