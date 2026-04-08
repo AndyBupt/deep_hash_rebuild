@@ -170,21 +170,37 @@ def plot_roc(fpr_uk, tpr_uk, eer_uk, fpr_sk, tpr_sk, eer_sk,
              G, save_path=None):
     """
     Plot ROC curves (Paper Fig.7/8).
-    Shows both unknown key and stolen key scenarios.
+    X-axis: FAR in log scale (1e-5 to 1e2 / 100%)
+    Y-axis: GAR in percentage (0-100%)
     """
-    fig, ax = plt.subplots(figsize=(7, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
     auc_uk = auc(fpr_uk, tpr_uk)
     auc_sk = auc(fpr_sk, tpr_sk)
-    ax.plot(fpr_uk, tpr_uk, 'b-', linewidth=2,
-            label=f'Unknown Key (AUC={auc_uk:.3f}, EER={eer_uk*100:.2f}%)')
-    ax.plot(fpr_sk, tpr_sk, 'r--', linewidth=2,
-            label=f'Stolen Key  (AUC={auc_sk:.3f}, EER={eer_sk*100:.2f}%)')
-    ax.plot([0, 1], [0, 1], 'k--', alpha=0.4)
-    ax.set_xlabel('FAR (False Accept Rate)')
-    ax.set_ylabel('GAR (Genuine Accept Rate)')
+
+    # 转为百分比
+    fpr_uk_pct = fpr_uk * 100
+    tpr_uk_pct = tpr_uk * 100
+    fpr_sk_pct = fpr_sk * 100
+    tpr_sk_pct = tpr_sk * 100
+
+    ax.semilogx(fpr_uk_pct, tpr_uk_pct, 'b-', linewidth=2,
+                label=f'Unknown Key (AUC={auc_uk:.3f}, EER={eer_uk*100:.2f}%)')
+    ax.semilogx(fpr_sk_pct, tpr_sk_pct, 'r--', linewidth=2,
+                label=f'Stolen Key  (AUC={auc_sk:.3f}, EER={eer_sk*100:.2f}%)')
+
+    # EER 标记点
+    ax.scatter([eer_uk * 100], [100 - eer_uk * 100],
+               color='blue', s=60, zorder=5)
+    ax.scatter([eer_sk * 100], [100 - eer_sk * 100],
+               color='red', s=60, zorder=5)
+
+    ax.set_xlim(1e-3, 1e2)   # 横轴：0.001% 到 100%
+    ax.set_ylim(0, 105)
+    ax.set_xlabel('FAR (%)')
+    ax.set_ylabel('GAR (%)')
     ax.set_title(f'ROC Curve (G={G})')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
+    ax.legend(loc='lower right')
+    ax.grid(True, which='both', alpha=0.3)
 
     if save_path:
         plt.savefig(save_path, dpi=150, bbox_inches='tight')
