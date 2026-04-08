@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 from dataset import build_dataloaders
 from model import FingerprintHashNet
-from ctm import CTM
+from ctm import StableCTM
 from sstm import SSTM
 from sstm_bch import SSTM_BCH
 
@@ -175,9 +175,9 @@ def plot_rs_vs_bch(k_rs, gars_rs, k_bch, gars_bch, G, save_path=None):
     plt.close()
 
 
-def run_one(codes, labels, G, output_dir):
+def run_one(codes, labels, G, flip_rate, output_dir):
     """跑单个 G 值的 RS vs BCH G-S 曲线，保存图和 JSON。"""
-    ctm = CTM(hash_dim=1024, G=G)
+    ctm = StableCTM(hash_dim=1024, G=G, flip_rate=flip_rate, stable_ratio=0.8)
 
     k_rs,  gars_rs  = run_rs_gs_curve(codes, labels, ctm, G)
     k_bch, gars_bch = run_bch_gs_curve(codes, labels, ctm, G)
@@ -192,6 +192,7 @@ def run_one(codes, labels, G, output_dir):
     summary = {
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "G": G,
+        "ctm": "StableCTM(stable_ratio=0.8)",
         "note": "GAR is the same for both stolen_key and unknown_key scenarios. "
                 "The two scenarios differ only in security interpretation of k.",
         "RS":  {"k_bits": k_rs,  "GAR (%)": [round(g, 2) for g in gars_rs]},
@@ -239,8 +240,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
-    # 加载数据
-    _, test_loader, num_classes = build_dataloaders(
+    # 加载数据（需要 train_loader 计算翻转率）
+    train_loader, test_loader, num_classes = build_dataloaders(
         DATA_ROOT, DB_NAMES, train_ratio=0.7, batch_size=8
     )
 
@@ -255,8 +256,14 @@ def main():
     model = model.to(device)
     model.set_beta(32)
 
-    # 提取特征（只提取一次，所有实验共用）
-    print("\nExtracting binary codes...")
+    # 提取训练集特征，计算翻转率（StableCTM 需要）
+    print("\nExtracting training set codes (for flip rate)...")
+    train_codes, train_labels = extract_codes(model, train_loader, device)
+    flip_rate = StableCTM.compute_flip_rate(train_codes, train_labels)
+    print(f"Flip rate: mean={flip_rate.mean()*100:.1f}%")
+
+    # 提取测试集特征
+    print("\nExtracting test set codes...")
     codes, labels = extract_codes(model, test_loader, device)
     print(f"Codes shape: {codes.shape}")
 
@@ -267,7 +274,7 @@ def main():
         print(f"G={G} bits")
         print(f"{'='*50}")
         k_rs, gars_rs, k_bch, gars_bch = run_one(
-            codes, labels, G, OUTPUT_DIR
+            codes, labels, G, flip_rate, OUTPUT_DIR
         )
         all_results.append((G, k_rs, gars_rs, k_bch, gars_bch))
 
