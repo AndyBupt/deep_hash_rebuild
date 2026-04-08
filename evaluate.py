@@ -12,6 +12,8 @@ Metrics:
 """
 
 import os
+import json
+import datetime
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -419,7 +421,7 @@ def run_evaluation(model_path=None, G_values=None, data_root="/root/autodl-tmp/F
                                   flip_rate=flip_rate, stable_ratio=0.8)
 
         print(f"\nPlotting G-S comparison (G={best_G}, K from 7 to {K_values[-1]})...")
-        plot_gs_curve_comparison(
+        k_bits_list, gars_baseline, gars_improved = plot_gs_curve_comparison(
             codes, labels,
             ctm_baseline=ctm_baseline,
             ctm_improved=ctm_improved,
@@ -431,7 +433,7 @@ def run_evaluation(model_path=None, G_values=None, data_root="/root/autodl-tmp/F
         # Baseline only
         ctm_baseline = CTM(hash_dim=1024, G=best_G)
         print(f"\nPlotting Baseline G-S curve (G={best_G}, K from 7 to {K_values[-1]})...")
-        plot_gs_curve_comparison(
+        k_bits_list, gars_baseline, gars_improved = plot_gs_curve_comparison(
             codes, labels,
             ctm_baseline=ctm_baseline,
             ctm_improved=None,
@@ -439,6 +441,49 @@ def run_evaluation(model_path=None, G_values=None, data_root="/root/autodl-tmp/F
             G=best_G,
             save_path=os.path.join(output_dir, f"gs_curve_G{best_G}_full.png")
         )
+
+    # --- 保存所有数值结果到 JSON ---
+    summary = {
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "model_path": model_path,
+        "dataset": data_root,
+        "G_values": G_values,
+        "sstm_method": "fuzzy_commitment_RS_GF2^8",
+        "ctm_method": "StableCTM(stable_ratio=0.8)" if run_comparison else "CTM(random)",
+        "per_G_results": {},
+        "gs_curve": {
+            "G": best_G,
+            "K_values": K_values,
+            "k_bits": k_bits_list,
+            "GAR_baseline (%)": [round(g, 2) for g in gars_baseline],
+            "GAR_improved (%)": [round(g, 2) for g in gars_improved] if gars_improved else None,
+        }
+    }
+    for G in G_values:
+        r = results[G]
+        # 计算符号错误率（用于分析 RS 纠错瓶颈）
+        genuine_mean = float(r['genuine_dists'].mean())
+        p_bit = genuine_mean  # 比特翻转率
+        ser = 1 - (1 - p_bit) ** 8  # 符号错误率
+        summary["per_G_results"][str(G)] = {
+            "genuine_hamming_mean":  round(genuine_mean, 4),
+            "genuine_hamming_std":   round(float(r['genuine_dists'].std()), 4),
+            "genuine_bit_flip_rate": f"{genuine_mean*100:.1f}%",
+            "symbol_error_rate":     f"{ser*100:.1f}%",
+            "impostor_uk_mean":      round(float(r['imp_uk'].mean()), 4),
+            "impostor_sk_mean":      round(float(r['imp_sk'].mean()), 4),
+            "EER_unknown_key (%)":   round(r['eer_uk'] * 100, 2),
+            "EER_stolen_key (%)":    round(r['eer_sk'] * 100, 2),
+            "GAR@FAR=0.5%_uk (%)":  round(r['gar_uk'] * 100, 2),
+            "GAR@FAR=0.5%_sk (%)":  round(r['gar_sk'] * 100, 2),
+            "AUC_uk":                round(float(auc(r['fpr_uk'], r['tpr_uk'])), 4),
+            "AUC_sk":                round(float(auc(r['fpr_sk'], r['tpr_sk'])), 4),
+        }
+
+    json_path = os.path.join(output_dir, "results_summary.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+    print(f"\nNumerical results saved: {json_path}")
 
     return results
 
