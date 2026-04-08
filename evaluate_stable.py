@@ -175,9 +175,12 @@ def plot_roc(fpr_uk, tpr_uk, eer_uk, fpr_sk, tpr_sk, eer_sk, G, save_path=None):
     plt.close()
 
 
-def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
+def _compute_gar_with_sstm(codes, labels, ctm, sstm):
+    """
+    计算真实用户的 GAR。
+    G-S 曲线中真实用户永远用自己的 ke，与 scenario 无关。
+    """
     unique_ids = np.unique(labels)
-    rng = np.random.default_rng(42)
     pass_count = total = 0
     for uid in unique_ids:
         idx = np.where(labels == uid)[0]
@@ -186,12 +189,7 @@ def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
         re, ke = ctm.enroll(codes[idx[0]])
         stored_hash, _ = sstm.enroll(re)
         for i in idx[1:]:
-            if scenario == "unknown_key":
-                _, ke_rand = ctm.enroll(codes[i],
-                                        seed=int(rng.integers(0, 99999)))
-                rp = ctm.authenticate(codes[i], ke_rand)
-            else:
-                rp = ctm.authenticate(codes[i], ke)
+            rp = ctm.authenticate(codes[i], ke)
             is_genuine, _ = sstm.authenticate(rp, stored_hash)
             pass_count += int(is_genuine)
             total += 1
@@ -208,8 +206,7 @@ def plot_gs_curve(codes, labels, ctm, K_values, G, save_path=None):
             gars.append(0)
             continue
         sstm = SSTM(G=G, K=K)
-        gar = _compute_gar_with_sstm(codes, labels, ctm, sstm,
-                                     scenario="stolen_key")
+        gar = _compute_gar_with_sstm(codes, labels, ctm, sstm)
         gars.append(gar * 100)
         print(f"  K={K:3d} (k={K*8:4d} bits): GAR={gar*100:.1f}%")
 

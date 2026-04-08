@@ -38,7 +38,8 @@ DB_NAMES    = ["DB1_A/image", "DB1_B/image",
                "DB3_A/image", "DB3_B/image"]
 OUTPUT_DIR  = "results_bch"
 G_VALUES    = [128, 256, 512]          # 评估的 G 值列表
-SCENARIOS   = ["stolen_key", "unknown_key"]   # 两种场景都跑
+# 注意：G-S 曲线的 GAR 与 scenario 无关（真实用户流程相同）
+# unknown_key / stolen_key 的区别只影响安全性解释，不影响 GAR 数值
 
 
 def extract_codes(model, loader, device):
@@ -52,10 +53,20 @@ def extract_codes(model, loader, device):
     return np.vstack(codes), np.concatenate(labels)
 
 
-def compute_gar(codes, labels, ctm, sstm_obj, scenario):
-    """计算给定 CTM + SSTM 组合的 GAR。"""
+def compute_gar(codes, labels, ctm, sstm_obj):
+    """
+    计算真实用户的 GAR（Genuine Accept Rate）。
+
+    G-S 曲线中，GAR 衡量的是真实用户能否通过 SSTM 认证。
+    真实用户永远使用自己注册时的 key ke，与 scenario 无关。
+
+    unknown_key / stolen_key 的区别体现在安全性分析（Impostor 攻击难度），
+    而不体现在 Genuine 用户的认证流程上。
+    两种 scenario 下 GAR 值相同，只是安全性 k 的含义不同：
+      - stolen_key: 攻击者知道 ke，安全性完全依赖 SSTM 的 k bits
+      - unknown_key: 攻击者不知道 ke，安全性更高
+    """
     unique_ids = np.unique(labels)
-    rng = np.random.default_rng(42)
     pass_count = total = 0
     for uid in unique_ids:
         idx = np.where(labels == uid)[0]
@@ -64,32 +75,28 @@ def compute_gar(codes, labels, ctm, sstm_obj, scenario):
         re, ke = ctm.enroll(codes[idx[0]])
         stored, _ = sstm_obj.enroll(re)
         for i in idx[1:]:
-            if scenario == "unknown_key":
-                _, ke_rand = ctm.enroll(codes[i],
-                                        seed=int(rng.integers(0, 99999)))
-                rp = ctm.authenticate(codes[i], ke_rand)
-            else:
-                rp = ctm.authenticate(codes[i], ke)
+            # 真实用户用自己的 ke 生成 rp
+            rp = ctm.authenticate(codes[i], ke)
             ok, _ = sstm_obj.authenticate(rp, stored)
             pass_count += int(ok)
             total += 1
     return pass_count / total if total > 0 else 0.0
 
 
-def run_rs_gs_curve(codes, labels, ctm, G, scenario):
+def run_rs_gs_curve(codes, labels, ctm, G):
     """RS 码 G-S 曲线：遍历 K 值（安全性 k = K*8 bits）"""
     N = G // 8
     K_values = list(range(7, N, 2))
     k_bits_list, gars = [], []
 
-    print(f"\n[RS] G={G}, scenario={scenario}...")
+    print(f"\n[RS] G={G}...")
     for K in K_values:
         if G // 8 <= K:
             gars.append(0.0)
             k_bits_list.append(K * 8)
             continue
         sstm = SSTM(G=G, K=K)
-        gar = compute_gar(codes, labels, ctm, sstm, scenario)
+        gar = compute_gar(codes, labels, ctm, sstm)
         gars.append(gar * 100)
         k_bits_list.append(K * 8)
         print(f"  K={K:3d}  k={K*8:4d} bits  GAR={gar*100:.1f}%")
@@ -97,7 +104,7 @@ def run_rs_gs_curve(codes, labels, ctm, G, scenario):
     return k_bits_list, gars
 
 
-def run_bch_gs_curve(codes, labels, ctm, G, scenario):
+def run_bch_gs_curve(codes, labels, ctm, G):
     """BCH 码 G-S 曲线：遍历 m=9 的所有有效 t 值"""
     import bchlib
     bch_params = []
@@ -120,11 +127,11 @@ def run_bch_gs_curve(codes, labels, ctm, G, scenario):
 
     k_bits_list, gars = [], []
 
-    print(f"\n[BCH] G={G}, scenario={scenario}...")
+    print(f"\n[BCH] G={G}...")
     for m, t, k_bits in bch_params:
         try:
             sstm_bch = SSTM_BCH(G=G, m=m, t=t)
-            gar = compute_gar(codes, labels, ctm, sstm_bch, scenario)
+            gar = compute_gar(codes, labels, ctm, sstm_bch)
             gars.append(gar * 100)
             k_bits_list.append(k_bits)
             t_eff = sstm_bch.get_effective_correction_capacity()
@@ -136,7 +143,16 @@ def run_bch_gs_curve(codes, labels, ctm, G, scenario):
     return k_bits_list, gars
 
 
-def plot_rs_vs_bch(k_rs, gars_rs, k_bch, gars_bch, G, scenario, save_path=None):
+def plot_rs_vs_bch(k_rs, gars_rs, k_bch, gars_bch, G, save_path=None):
+    """
+    G-S 曲线图。
+
+    注意：GAR 值对两种 scenario 相同（真实用户流程一样）。
+    两种 scenario 的区别仅在于安全性 k 的解释：
+      - Stolen Key：攻击者知道 ke，安全性完全由 k bits 决定
+      - Unknown Key：攻击者不知道 ke，实际安全性更高
+    因此同一张图可以同时代表两种 scenario。
+    """
     fig, ax = plt.subplots(figsize=(11, 6))
 
     ax.plot(k_rs,  gars_rs,  'r-o', linewidth=2, markersize=4,
@@ -147,8 +163,8 @@ def plot_rs_vs_bch(k_rs, gars_rs, k_bch, gars_bch, G, scenario, save_path=None):
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
     ax.set_xlabel('Security Level k (bits)')
     ax.set_ylabel('GAR (%)')
-    scenario_label = "Stolen Key" if scenario == "stolen_key" else "Unknown Key"
-    ax.set_title(f'G-S Curve: RS vs BCH (G={G} bits, {scenario_label})')
+    ax.set_title(f'G-S Curve: RS vs BCH (G={G} bits)\n'
+                 f'[k = security bits; same GAR for both stolen/unknown key scenarios]')
     ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     ax.set_ylim(-5, 108)
@@ -159,30 +175,29 @@ def plot_rs_vs_bch(k_rs, gars_rs, k_bch, gars_bch, G, scenario, save_path=None):
     plt.close()
 
 
-def run_one(codes, labels, G, scenario, output_dir):
-    """跑单个 (G, scenario) 组合，保存图和 JSON。"""
+def run_one(codes, labels, G, output_dir):
+    """跑单个 G 值的 RS vs BCH G-S 曲线，保存图和 JSON。"""
     ctm = CTM(hash_dim=1024, G=G)
 
-    k_rs,  gars_rs  = run_rs_gs_curve(codes, labels, ctm, G, scenario)
-    k_bch, gars_bch = run_bch_gs_curve(codes, labels, ctm, G, scenario)
+    k_rs,  gars_rs  = run_rs_gs_curve(codes, labels, ctm, G)
+    k_bch, gars_bch = run_bch_gs_curve(codes, labels, ctm, G)
 
     # 绘图
     plot_rs_vs_bch(
-        k_rs, gars_rs, k_bch, gars_bch, G, scenario,
-        save_path=os.path.join(output_dir,
-                               f"gs_rs_vs_bch_G{G}_{scenario}.png")
+        k_rs, gars_rs, k_bch, gars_bch, G,
+        save_path=os.path.join(output_dir, f"gs_rs_vs_bch_G{G}.png")
     )
 
     # 保存 JSON
     summary = {
         "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "G": G,
-        "scenario": scenario,
+        "note": "GAR is the same for both stolen_key and unknown_key scenarios. "
+                "The two scenarios differ only in security interpretation of k.",
         "RS":  {"k_bits": k_rs,  "GAR (%)": [round(g, 2) for g in gars_rs]},
         "BCH": {"k_bits": k_bch, "GAR (%)": [round(g, 2) for g in gars_bch]},
     }
-    json_path = os.path.join(output_dir,
-                             f"gs_rs_vs_bch_G{G}_{scenario}.json")
+    json_path = os.path.join(output_dir, f"gs_rs_vs_bch_G{G}.json")
     with open(json_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"Results saved: {json_path}")
@@ -190,14 +205,12 @@ def run_one(codes, labels, G, scenario, output_dir):
     return k_rs, gars_rs, k_bch, gars_bch
 
 
-def plot_all_G_comparison(all_results, scenario, output_dir):
-    """把同一 scenario 下所有 G 值的 BCH 曲线画在一张图上，方便对比。"""
+def plot_all_G_comparison(all_results, output_dir):
+    """把所有 G 值的曲线画在一张图上，方便对比。"""
     fig, axes = plt.subplots(1, len(all_results), figsize=(7 * len(all_results), 6),
                              sharey=True)
     if len(all_results) == 1:
         axes = [axes]
-
-    scenario_label = "Stolen Key" if scenario == "stolen_key" else "Unknown Key"
 
     for ax, (G, k_rs, gars_rs, k_bch, gars_bch) in zip(axes, all_results):
         ax.plot(k_rs,  gars_rs,  'r-o', linewidth=2, markersize=3,
@@ -212,9 +225,9 @@ def plot_all_G_comparison(all_results, scenario, output_dir):
         ax.grid(True, alpha=0.3)
         ax.set_ylim(-5, 108)
 
-    fig.suptitle(f'G-S Curve: RS vs BCH ({scenario_label})', fontsize=13)
+    fig.suptitle('G-S Curve: RS vs BCH (all G values)', fontsize=13)
     plt.tight_layout()
-    save_path = os.path.join(output_dir, f"gs_rs_vs_bch_all_{scenario}.png")
+    save_path = os.path.join(output_dir, "gs_rs_vs_bch_all.png")
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
     print(f"Saved: {save_path}")
     plt.close()
@@ -247,22 +260,19 @@ def main():
     codes, labels = extract_codes(model, test_loader, device)
     print(f"Codes shape: {codes.shape}")
 
-    # 遍历所有 scenario 和 G 值
-    for scenario in SCENARIOS:
-        print(f"\n{'='*55}")
-        print(f"Scenario: {scenario}")
-        print(f"{'='*55}")
+    # 遍历所有 G 值（GAR 与 scenario 无关，只跑一次）
+    all_results = []
+    for G in G_VALUES:
+        print(f"\n{'='*50}")
+        print(f"G={G} bits")
+        print(f"{'='*50}")
+        k_rs, gars_rs, k_bch, gars_bch = run_one(
+            codes, labels, G, OUTPUT_DIR
+        )
+        all_results.append((G, k_rs, gars_rs, k_bch, gars_bch))
 
-        all_results = []
-        for G in G_VALUES:
-            print(f"\n--- G={G} ---")
-            k_rs, gars_rs, k_bch, gars_bch = run_one(
-                codes, labels, G, scenario, OUTPUT_DIR
-            )
-            all_results.append((G, k_rs, gars_rs, k_bch, gars_bch))
-
-        # 多 G 值汇总图
-        plot_all_G_comparison(all_results, scenario, OUTPUT_DIR)
+    # 多 G 值汇总图
+    plot_all_G_comparison(all_results, OUTPUT_DIR)
 
     print("\nAll done.")
 

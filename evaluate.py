@@ -208,10 +208,13 @@ def plot_roc(fpr_uk, tpr_uk, eer_uk, fpr_sk, tpr_sk, eer_sk,
     plt.show()
 
 
-def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
-    """Helper: compute GAR using SSTM for a given scenario."""
+def _compute_gar_with_sstm(codes, labels, ctm, sstm):
+    """
+    Helper: compute GAR using SSTM.
+    G-S 曲线中真实用户永远用自己的 ke。
+    unknown_key / stolen_key 的区别只影响安全性解释，不影响 GAR 数值。
+    """
     unique_ids = np.unique(labels)
-    rng = np.random.default_rng(42)
     pass_count = total = 0
     for uid in unique_ids:
         idx = np.where(labels == uid)[0]
@@ -220,12 +223,7 @@ def _compute_gar_with_sstm(codes, labels, ctm, sstm, scenario):
         re, ke = ctm.enroll(codes[idx[0]])
         stored_hash, _ = sstm.enroll(re)
         for i in idx[1:]:
-            if scenario == "unknown_key":
-                _, ke_rand = ctm.enroll(codes[i],
-                                        seed=int(rng.integers(0, 99999)))
-                rp = ctm.authenticate(codes[i], ke_rand)
-            else:
-                rp = ctm.authenticate(codes[i], ke)
+            rp = ctm.authenticate(codes[i], ke)
             is_genuine, _ = sstm.authenticate(rp, stored_hash)
             pass_count += int(is_genuine)
             total += 1
@@ -255,8 +253,7 @@ def plot_gs_curve_comparison(codes, labels, ctm_baseline, ctm_improved,
                 gars_improved.append(0)
             continue
         sstm = SSTM(G=G, K=K)
-        gar = _compute_gar_with_sstm(codes, labels, ctm_baseline, sstm,
-                                      scenario="stolen_key")
+        gar = _compute_gar_with_sstm(codes, labels, ctm_baseline, sstm)
         gars_baseline.append(gar * 100)
         print(f"  Baseline  K={K:3d} (k={K*8:4d} bits): GAR={gar*100:.1f}%")
 
@@ -267,8 +264,7 @@ def plot_gs_curve_comparison(codes, labels, ctm_baseline, ctm_improved,
                 gars_improved.append(0)
                 continue
             sstm = SSTM(G=G, K=K)
-            gar = _compute_gar_with_sstm(codes, labels, ctm_improved, sstm,
-                                          scenario="stolen_key")
+            gar = _compute_gar_with_sstm(codes, labels, ctm_improved, sstm)
             gars_improved.append(gar * 100)
             print(f"  Improved  K={K:3d} (k={K*8:4d} bits): GAR={gar*100:.1f}%")
 
