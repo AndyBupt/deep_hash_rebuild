@@ -10,3 +10,4 @@ matplotlib>=3.6
 Pillow>=9.0
 tqdm>=4.64
 reedsolo>=1.7
+bchlib>=2.0
