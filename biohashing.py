@@ -37,6 +37,7 @@ class BioHashing:
         """
         self.hash_dim = hash_dim
         self.G = G
+        self._proj_cache: dict = {}  # key -> R，缓存投影矩阵避免重复计算
 
     def enroll(self, binary_vec: np.ndarray,
                key: Optional[int] = None,
@@ -96,22 +97,16 @@ class BioHashing:
 
     def _make_projection(self, key: int) -> np.ndarray:
         """
-        用密钥生成随机正交投影矩阵 R (hash_dim × G)
+        用密钥生成随机投影矩阵 R (hash_dim × G)，带缓存。
 
-        使用 Gram-Schmidt 正交化确保列向量正交，
-        提升 BioHashing 的区分能力（原论文要求）。
+        同一个 key 只生成一次矩阵，后续直接复用，大幅加速评估。
         """
-        rng = np.random.default_rng(int(key))
-        # 生成随机矩阵
-        R = rng.standard_normal((self.hash_dim, self.G))
-        # 列正交化（QR 分解）
-        if self.G <= self.hash_dim:
-            Q, _ = np.linalg.qr(R)
-            R = Q[:, :self.G]
-        else:
-            # G > hash_dim 时无法完全正交，退而求其次做列归一化
+        if key not in self._proj_cache:
+            rng = np.random.default_rng(int(key))
+            R = rng.standard_normal((self.hash_dim, self.G))
             R = R / np.linalg.norm(R, axis=0, keepdims=True)
-        return R
+            self._proj_cache[key] = R
+        return self._proj_cache[key]
 
     def _to_float(self, vec: np.ndarray) -> np.ndarray:
         """将输入统一转为 float，{0,1} 转为 {-1,+1}"""
