@@ -212,28 +212,32 @@ def analyze_bit_flip_rates(codes, labels, output_dir=OUTPUT_DIR):
 # ============================================================
 # 分析三：稳定比特 vs 随机比特 的 Genuine 汉明距离对比
 # ============================================================
-def compare_stable_vs_random(codes, labels, flip_rate, G=512, output_dir=OUTPUT_DIR):
+def compare_stable_vs_random(codes, labels, flip_rate, G=512, stable_ratio=0.8, output_dir=OUTPUT_DIR):
     """
     对比两种比特选择策略下的 Genuine 汉明距离分布：
-    1. 随机选 G 个 bit（论文基线）
-    2. 选翻转率最低的 G 个 bit（改进方案）
+    1. 随机选 G 个 bit（论文基线 CTM）
+    2. 从稳定池（翻转率最低的 stable_ratio 比例）中随机选 G 个 bit（StableCTM，保留可撤销性）
 
-    目的：展示稳定比特选择能显著降低 Genuine 翻转数
+    目的：展示稳定比特选择能降低 Genuine 翻转数，同时保持可撤销性
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    # 策略1：随机选 G 个 bit
+    hash_dim = len(flip_rate)
     rng = np.random.default_rng(42)
-    random_indices = rng.choice(len(flip_rate), size=G, replace=False)
+
+    # 策略1：从全部 hash_dim 个 bit 中随机选 G 个（普通 CTM）
+    random_indices = rng.choice(hash_dim, size=G, replace=False)
     random_indices = np.sort(random_indices)
 
-    # 策略2：选翻转率最低的 G 个 bit
-    stable_indices = np.argsort(flip_rate)[:G]
+    # 策略2：从稳定池（翻转率最低的 stable_ratio 比例）中随机选 G 个（StableCTM，保留可撤销性）
+    n_stable = max(int(hash_dim * stable_ratio), G + 1)
+    stable_pool = np.argsort(flip_rate)[:n_stable]
+    stable_indices = rng.choice(stable_pool, size=G, replace=False)
     stable_indices = np.sort(stable_indices)
 
-    print(f"\n=== 比特选择策略对比 (G={G}) ===")
-    print(f"随机选择: 平均翻转率={flip_rate[random_indices].mean()*100:.2f}%")
-    print(f"稳定选择: 平均翻转率={flip_rate[stable_indices].mean()*100:.2f}%")
+    print(f"\n=== 比特选择策略对比 (G={G}, stable_ratio={stable_ratio}) ===")
+    print(f"随机选择（CTM）:    稳定池大小={hash_dim}, 平均翻转率={flip_rate[random_indices].mean()*100:.2f}%")
+    print(f"稳定位选择（StableCTM）: 稳定池大小={n_stable}, 平均翻转率={flip_rate[stable_indices].mean()*100:.2f}%")
 
     # 计算两种策略下的 Genuine 汉明距离
     def compute_genuine_dists(indices):
@@ -254,11 +258,11 @@ def compare_stable_vs_random(codes, labels, flip_rate, G=512, output_dir=OUTPUT_
     dists_stable = compute_genuine_dists(stable_indices)
 
     print(f"\nGenuine 汉明距离（归一化）:")
-    print(f"  随机选择: 均值={dists_random.mean():.4f} ({dists_random.mean()*100:.1f}%), "
+    print(f"  随机选择（CTM）:         均值={dists_random.mean():.4f} ({dists_random.mean()*100:.1f}%), "
           f"std={dists_random.std():.4f}")
-    print(f"  稳定选择: 均值={dists_stable.mean():.4f} ({dists_stable.mean()*100:.1f}%), "
+    print(f"  稳定位选择（StableCTM）: 均值={dists_stable.mean():.4f} ({dists_stable.mean()*100:.1f}%), "
           f"std={dists_stable.std():.4f}")
-    print(f"  改善幅度: {(dists_random.mean() - dists_stable.mean())*100:.1f}% 翻转率降低")
+    print(f"  改善幅度: {(dists_random.mean() - dists_stable.mean())*100:.1f}% 翻转率降低（保留可撤销性）")
 
     # 绘制对比图
     from scipy.stats import norm as scipy_norm
@@ -269,9 +273,9 @@ def compare_stable_vs_random(codes, labels, flip_rate, G=512, output_dir=OUTPUT_
     s_mean, s_std = dists_stable.mean(), dists_stable.std()
 
     ax.plot(x, scipy_norm.pdf(x, g_mean, g_std), 'r-', linewidth=2,
-            label=f'随机选择（基线）: 均值={g_mean*100:.1f}%')
+            label=f'CTM 随机选位（基线）: 均值={g_mean*100:.1f}%')
     ax.plot(x, scipy_norm.pdf(x, s_mean, s_std), 'b-', linewidth=2,
-            label=f'稳定比特选择（改进）: 均值={s_mean*100:.1f}%')
+            label=f'StableCTM 稳定位选择（保留可撤销性）: 均值={s_mean*100:.1f}%')
     ax.fill_between(x, scipy_norm.pdf(x, g_mean, g_std), alpha=0.15, color='red')
     ax.fill_between(x, scipy_norm.pdf(x, s_mean, s_std), alpha=0.15, color='blue')
 
