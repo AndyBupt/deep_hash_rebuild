@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 from dataset import build_dataloaders, get_transforms
 from model import FingerprintHashNet
-from ctm import CTM
+from ctm import CTM, StableCTM
 from sstm import SSTM
 
 
@@ -333,7 +333,7 @@ def compare_gs_curves(test_codes, test_labels, flip_rate, G=512, output_dir=OUTP
         print(f"  Baseline  K={K:3d} (k={K*8:4d} bits): GAR={gar:.1f}%")
 
     # --- 改进 CTM（稳定比特选择）---
-    ctm_stable = StableCTM(hash_dim=1024, G=G, flip_rate=flip_rate, stable_ratio=0.3)
+    ctm_stable = StableCTM(hash_dim=1024, G=G, flip_rate=flip_rate, stable_ratio=0.8)
     gars_stable = []
     print(f"\nComputing improved G-S curve (Stable-Bit CTM)...")
     for K in K_list:
