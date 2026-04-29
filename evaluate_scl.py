@@ -137,19 +137,30 @@ def compute_gar_polar_embed(binary_codes, hash_codes, labels, ctm, G):
 def compute_gar_scl(binary_codes, hash_codes, labels, ctm, G,
                     flip_prob, L=8, crc_bits=8):
     """
-    SCL+CRC G-S 曲线：遍历不同 k 值（安全性）。
-    与 BCH 使用相同的 k_bits 范围，方便横轴对比。
+    SCL+CRC G-S 曲线。
+
+    参数对齐说明：
+      - 横轴 k_bits 表示"密钥长度"（即安全性），与 BCH 保持一致
+      - actual_k = k_bits（密钥长度，不减 CRC）
+      - 极化码信息位 = actual_k + crc_bits（密钥 + CRC）
+      - 这样横轴才是真正可比的安全性 k
+
+    特殊情况：
+      - L=1, crc_bits=0 时等价于标准 SC 译码，可用于验证代码一致性
     """
     bch_params = _get_bch_params()
     unique_ids = np.unique(labels)
     k_bits_list, gars = [], []
-    print(f"\n[SCL L={L} CRC-{crc_bits}] G={G}...")
+
+    label_str = f"SCL L={L}" + (f" CRC-{crc_bits}" if crc_bits > 0 else " no-CRC")
+    print(f"\n[{label_str}] G={G}...")
 
     for m, t, k_bits in bch_params:
-        # SCL 的 k = 安全性，实际信息位 = k + crc_bits
-        # 保证与 BCH 的安全性 k_bits 对应
-        actual_k = k_bits - crc_bits
-        if actual_k <= 0:
+        # actual_k = k_bits（密钥长度与 BCH 对齐）
+        # 极化码总信息位 = actual_k + crc_bits
+        actual_k = k_bits
+        k_total = actual_k + crc_bits
+        if k_total >= G:
             continue
         try:
             sstm = SSTM_PolarSCL(G=G, k=actual_k, flip_prob=flip_prob,
@@ -175,18 +186,20 @@ def compute_gar_scl(binary_codes, hash_codes, labels, ctm, G,
 
         gar = pass_count / total if total > 0 else 0.0
         gars.append(gar * 100)
-        k_bits_list.append(k_bits)  # 注意：k_bits 是"安全性"（不含 CRC）
-        print(f"  t={t:3d}  k={k_bits:4d} bits (actual_k={actual_k})  GAR={gar*100:.1f}%")
+        k_bits_list.append(k_bits)
+        print(f"  t={t:3d}  k={k_bits:4d} bits  "
+              f"(k_total={k_total})  GAR={gar*100:.1f}%")
 
     return k_bits_list, gars
 
 
-def plot_comparison(results, G, output_dir):
+def plot_comparison(results, G, output_dir, scl_L, scl_crc):
     fig, ax = plt.subplots(figsize=(12, 7))
     styles = {
-        "BCH":         ("r-o",  "BCH Code (Baseline)"),
-        "PolarEmbed":  ("g-^",  "PolarEmbed (Confidence-guided)"),
-        "SCL_CRC":     ("b-s",  f"Polar SCL(L={SCL_L})+CRC-{SCL_CRC}"),
+        "BCH":          ("r-o",  "BCH Code (Baseline)"),
+        "PolarEmbed":   ("g-^",  "PolarEmbed (Confidence-guided)"),
+        "SCL_L1_noCRC": ("k--",  "SCL L=1 no-CRC (≡ SC, sanity check)"),
+        "SCL_CRC":      ("b-s",  f"Polar SCL(L={scl_L})+CRC-{scl_crc}"),
     }
     for name, (style, label) in styles.items():
         if name not in results:
@@ -262,8 +275,20 @@ def main():
         "GAR (%)": [round(g, 2) for g in gars_pe],
     }
 
-    # ── SCL + CRC（真正极化码）──────────────────
-    print(f"\n{'='*55}\nMethod 3: Polar SCL(L={SCL_L})+CRC-{SCL_CRC}")
+    # ── SCL(L=1, no CRC) 验证基准（理论上 = SC 译码）──
+    print(f"\n{'='*55}\nMethod 3a: SCL L=1 no-CRC (sanity check, should ≈ SC)")
+    k_sc, gars_sc = compute_gar_scl(
+        binary_codes, hash_codes, labels, ctm, G,
+        flip_prob=flip_prob_mean, L=1, crc_bits=0
+    )
+    results["SCL_L1_noCRC"] = {
+        "k_bits": k_sc,
+        "GAR (%)": [round(g, 2) for g in gars_sc],
+        "note": "L=1 no-CRC is equivalent to SC decoding"
+    }
+
+    # ── SCL + CRC（真正极化码，参数对齐版本）──────
+    print(f"\n{'='*55}\nMethod 3b: Polar SCL(L={SCL_L})+CRC-{SCL_CRC} (aligned k)")
     k_scl, gars_scl = compute_gar_scl(
         binary_codes, hash_codes, labels, ctm, G,
         flip_prob=flip_prob_mean, L=SCL_L, crc_bits=SCL_CRC
@@ -271,10 +296,11 @@ def main():
     results["SCL_CRC"] = {
         "k_bits": k_scl,
         "GAR (%)": [round(g, 2) for g in gars_scl],
+        "note": f"k_bits = actual key length (security), k_total = k + {SCL_CRC}"
     }
 
     # ── 绘图 ─────────────────────────────────────
-    plot_comparison(results, G, OUTPUT_DIR)
+    plot_comparison(results, G, OUTPUT_DIR, SCL_L, SCL_CRC)
 
     # ── 保存 JSON ────────────────────────────────
     summary = {
