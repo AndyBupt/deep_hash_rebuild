@@ -44,7 +44,12 @@ SCL_L        = 8    # SCL 列表大小
 SCL_CRC      = 8    # CRC 位数
 
 
-def _get_bch_params():
+def _get_bch_params(t_min=30, step=4):
+    """
+    返回 BCH 参数列表。
+    t_min: t 低于此值时停止（GAR 已很低，无需继续）
+    step:  每隔 step 个点取一个（加速评估）
+    """
     params = []
     for t in range(1, 57):
         try:
@@ -59,7 +64,13 @@ def _get_bch_params():
     for m, t, k in params:
         if k not in seen_k or t > seen_k[k][1]:
             seen_k[k] = (m, t, k)
-    return sorted(seen_k.values(), key=lambda x: x[2])
+    all_params = sorted(seen_k.values(), key=lambda x: x[2])
+
+    # 过滤：t < t_min 的点跳过（GAR 已接近 0，没有意义）
+    all_params = [(m, t, k) for m, t, k in all_params if t >= t_min]
+
+    # 每隔 step 个点取一个（从最小 k 开始）
+    return all_params[::step]
 
 
 def extract_codes_with_embed(model, loader, device):
