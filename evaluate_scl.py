@@ -44,11 +44,11 @@ SCL_L        = 8    # SCL 列表大小
 SCL_CRC      = 8    # CRC 位数
 
 
-def _get_bch_params(t_min=30, step=4):
+def _get_bch_params(t_min=None, step=1):
     """
     返回 BCH 参数列表。
-    t_min: t 低于此值时停止（GAR 已很低，无需继续）
-    step:  每隔 step 个点取一个（加速评估）
+    t_min: t 低于此值时停止，None 表示不限制
+    step:  每隔 step 个点取一个，1 表示全量
     """
     params = []
     for t in range(1, 57):
@@ -66,10 +66,9 @@ def _get_bch_params(t_min=30, step=4):
             seen_k[k] = (m, t, k)
     all_params = sorted(seen_k.values(), key=lambda x: x[2])
 
-    # 过滤：t < t_min 的点跳过（GAR 已接近 0，没有意义）
-    all_params = [(m, t, k) for m, t, k in all_params if t >= t_min]
+    if t_min is not None:
+        all_params = [(m, t, k) for m, t, k in all_params if t >= t_min]
 
-    # 每隔 step 个点取一个（从最小 k 开始）
     return all_params[::step]
 
 
@@ -159,12 +158,13 @@ def compute_gar_scl(binary_codes, hash_codes, labels, ctm, G,
     特殊情况：
       - L=1, crc_bits=0 时等价于标准 SC 译码，可用于验证代码一致性
     """
-    bch_params = _get_bch_params()
+    # SCL 采用稀疏采样：t>=30，每隔4个点取一个
+    bch_params = _get_bch_params(t_min=30, step=4)
     unique_ids = np.unique(labels)
     k_bits_list, gars = [], []
 
     label_str = f"SCL L={L}" + (f" CRC-{crc_bits}" if crc_bits > 0 else " no-CRC")
-    print(f"\n[{label_str}] G={G}...")
+    print(f"\n[{label_str}] G={G} (sparse: t>=30, step=4)...")
 
     for m, t, k_bits in bch_params:
         # actual_k = k_bits（密钥长度与 BCH 对齐）
