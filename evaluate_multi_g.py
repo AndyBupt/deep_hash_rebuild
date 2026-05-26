@@ -70,21 +70,26 @@ def extract_codes_with_embed(model, loader, device):
 # ──────────────────────────────────────────────
 
 def get_bch_params_for_g(G, t_min=None, step=1):
-    """Return BCH(m=9) params where 40 <= k_bits < G."""
-    params = []
-    for t in range(1, 57):
-        try:
-            b = bchlib.BCH(t=t, m=9)
-            k_bytes = (b.n - b.ecc_bits) // 8
-            k_bits = k_bytes * 8
-            if 40 <= k_bits < G:
-                params.append((9, b.t, k_bits))
-        except Exception:
-            break
+    """Return BCH params (m=8 or m=9) where 40 <= k_bits < G.
+    Tries both m=8 (n=255) and m=9 (n=511) to cover small G values.
+    For each unique k, keeps the entry with the highest t (best error correction).
+    """
     seen_k = {}
-    for m, t, k in params:
-        if k not in seen_k or t > seen_k[k][1]:
-            seen_k[k] = (m, t, k)
+
+    for m in (8, 9):
+        t_limit = 57 if m == 9 else 35
+        for t in range(1, t_limit):
+            try:
+                b = bchlib.BCH(t=t, m=m)
+                k_bytes = (b.n - b.ecc_bits) // 8
+                k_bits = k_bytes * 8
+                if 40 <= k_bits < G:
+                    # Keep the (m, t) pair with the highest t for each k
+                    if k_bits not in seen_k or t > seen_k[k_bits][1]:
+                        seen_k[k_bits] = (m, t, k_bits)
+            except Exception:
+                break
+
     all_params = sorted(seen_k.values(), key=lambda x: x[2])
     if t_min is not None:
         all_params = [(m, t, k) for m, t, k in all_params if t >= t_min]
@@ -169,7 +174,7 @@ def run_gs_for_g(binary_codes, hash_codes, labels, flip_rate, G, output_dir):
     print("\n  [RGSS]...")
     for m_b, t_b, k_b in bch_params:
         gar = compute_gar_rgss(binary_codes, hash_codes, labels, ctm,
-                               G=G, k_bits=k_b, m=9, t=t_b)
+                               G=G, k_bits=k_b, m=m_b, t=t_b)
         if gar is None:
             print(f"    t={t_b:3d}  k={k_b:4d} bits  SKIP")
             continue
