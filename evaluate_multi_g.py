@@ -70,25 +70,28 @@ def extract_codes_with_embed(model, loader, device):
 # ──────────────────────────────────────────────
 
 def get_bch_params_for_g(G, t_min=None, step=1):
-    """Return BCH params (m=8 or m=9) where 40 <= k_bits < G.
-    Tries both m=8 (n=255) and m=9 (n=511) to cover small G values.
-    For each unique k, keeps the entry with the highest t (best error correction).
-    """
-    seen_k = {}
+    """Return BCH params where 40 <= k_bits < G.
 
-    for m in (8, 9):
-        t_limit = 57 if m == 9 else 35
-        for t in range(1, t_limit):
-            try:
-                b = bchlib.BCH(t=t, m=m)
-                k_bytes = (b.n - b.ecc_bits) // 8
-                k_bits = k_bytes * 8
-                if 40 <= k_bits < G:
-                    # Keep the (m, t) pair with the highest t for each k
-                    if k_bits not in seen_k or t > seen_k[k_bits][1]:
-                        seen_k[k_bits] = (m, t, k_bits)
-            except Exception:
-                break
+    Uses a single BCH polynomial degree m chosen by template size:
+      - G <= 255  →  m=8 (n=255),  avoids non-monotonicity from mixing
+      - G >= 256  →  m=9 (n=511)
+    Mixing m=8 and m=9 in the same curve causes non-monotonicity because
+    BCH(m=9) has a much higher t/k ratio, making the G-S curve jump.
+    """
+    m = 8 if G <= 255 else 9
+    t_limit = 35 if m == 8 else 57
+
+    seen_k = {}
+    for t in range(1, t_limit):
+        try:
+            b = bchlib.BCH(t=t, m=m)
+            k_bytes = (b.n - b.ecc_bits) // 8
+            k_bits = k_bytes * 8
+            if 40 <= k_bits < G:
+                if k_bits not in seen_k or t > seen_k[k_bits][1]:
+                    seen_k[k_bits] = (m, t, k_bits)
+        except Exception:
+            break
 
     all_params = sorted(seen_k.values(), key=lambda x: x[2])
     if t_min is not None:
