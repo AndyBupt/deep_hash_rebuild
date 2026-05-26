@@ -185,19 +185,6 @@ def run_gs_for_g(binary_codes, hash_codes, labels, flip_rate, G, output_dir):
             label='RGSS — Reliability-Guided (Proposed)')
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
 
-    # annotate inflection points
-    for name, ks, gs, color in [('BCH', k_bits_bch, gars_bch, 'red'),
-                                 ('RGSS', k_bits_rgss, gars_rgss, 'blue')]:
-        pts = [(k, g) for k, g in zip(ks, gs) if g >= 50]
-        if pts:
-            k_inf, g_inf = pts[-1]
-            ax.axvline(x=k_inf, color=color, linestyle=':', alpha=0.5)
-            ax.annotate(f'{name}\nk={k_inf}b',
-                        xy=(k_inf, 50),
-                        xytext=(k_inf + (8 if name == 'BCH' else -55), 62),
-                        arrowprops=dict(arrowstyle='->', color=color),
-                        color=color, fontsize=8)
-
     ax.set_xlabel('Security Level k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'G-S Curve: BCH vs RGSS  (G={G} bits, StableCTM)')
