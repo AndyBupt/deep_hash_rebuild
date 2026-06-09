@@ -52,22 +52,22 @@ DATASETS = [
          "DB2_A/image", "DB2_B/image",
          "DB3_A/image", "DB3_B/image"],
     ),
-    # ── FVC2002 (uncomment if available) ──────────────────────────────
-    # (
-    #     "FVC2002",
-    #     "/root/autodl-tmp/FVC2002",
-    #     ["DB1_A", "DB1_B",
-    #      "DB2_A", "DB2_B",
-    #      "DB3_A", "DB3_B"],
-    # ),
-    # ── FVC2006 (uncomment if available) ──────────────────────────────
-    # (
-    #     "FVC2006",
-    #     "/root/autodl-tmp/FVC2006",
-    #     ["DB1_A", "DB1_B",
-    #      "DB2_A", "DB2_B",
-    #      "DB3_A", "DB3_B"],
-    # ),
+    # ── FVC2002 ────────────────────────────────────────────────────────
+    # NOTE: FVC2002 images may live directly in DB1_A/ (no "image" subfolder).
+    # If the script crashes with "0 images loaded", change to "DB1_A/image" etc.
+    (
+        "FVC2002",
+        "/root/autodl-tmp/FVC2002",
+        ["DB1_A", "DB1_B",
+         "DB2_A", "DB2_B",
+         "DB3_A", "DB3_B"],
+    ),
+    # ── FVC2006 (only A variants available) ───────────────────────────
+    (
+        "FVC2006",
+        "/root/autodl-tmp/FVC2006",
+        ["DB1_A", "DB2_A", "DB3_A"],
+    ),
 ]
 
 
