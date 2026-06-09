@@ -53,20 +53,18 @@ DATASETS = [
          "DB3_A/image", "DB3_B/image"],
     ),
     # ── FVC2002 ────────────────────────────────────────────────────────
-    # NOTE: FVC2002 images may live directly in DB1_A/ (no "image" subfolder).
-    # If the script crashes with "0 images loaded", change to "DB1_A/image" etc.
     (
         "FVC2002",
         "/root/autodl-tmp/FVC2002",
-        ["DB1_A", "DB1_B",
-         "DB2_A", "DB2_B",
-         "DB3_A", "DB3_B"],
+        ["DB1_A/image", "DB1_B/image",
+         "DB2_A/image", "DB2_B/image",
+         "DB3_A/image", "DB3_B/image"],
     ),
     # ── FVC2006 (only A variants available) ───────────────────────────
     (
         "FVC2006",
         "/root/autodl-tmp/FVC2006",
-        ["DB1_A", "DB2_A", "DB3_A"],
+        ["DB1_A/image", "DB2_A/image", "DB3_A/image"],
     ),
 ]
 
@@ -230,7 +228,7 @@ def evaluate_dataset(name, data_root, db_names, model, device, flip_rate_src,
     print(f"  RGSS GAR=50% inflection: k={rgss_k50} bits")
 
     # Plot
-    fig, ax = plt.subplots(figsize=(10, 6))
+    _, ax = plt.subplots(figsize=(10, 6))
     ax.plot(k_bits_bch,  gars_bch,  'r-o', linewidth=2, markersize=4,
             label='BCH (Baseline)')
     ax.plot(k_bits_rgss, gars_rgss, 'b-s', linewidth=2, markersize=4,
@@ -268,7 +266,7 @@ def plot_summary(all_results, output_dir):
 
     x = np.arange(len(names))
     w = 0.35
-    fig, ax = plt.subplots(figsize=(max(8, len(names) * 3), 6))
+    _, ax = plt.subplots(figsize=(max(8, len(names) * 3), 6))
 
     bars_bch  = ax.bar(x - w/2, bch_k50s,  w, label='BCH (Baseline)',
                        color='#d62728', alpha=0.85)
