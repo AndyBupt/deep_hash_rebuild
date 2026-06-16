@@ -442,22 +442,24 @@ def plot_perm_linkability(mated_after, non_mated_after,
 
 
 def plot_helper_known_attack(expA_results, output_dir):
-    labels_bar = ['BCH\nstandard', 'RGSS\nstandard', 'RGSS\nhelper-known']
+    labels_bar = ['BCH\nstandard', 'BCH\nperm-aware',
+                  'RGSS\nstandard', 'RGSS\nperm-aware']
     values = [
         expA_results["BCH_standard_FAR_%"],
+        expA_results["BCH_perm_aware_FAR_%"],
         expA_results["RGSS_standard_FAR_%"],
-        expA_results["RGSS_helper_known_FAR_%"],
+        expA_results["RGSS_perm_aware_FAR_%"],
     ]
-    colors = ['#d62728', '#1f77b4', '#aec7e8']
-    fig, ax = plt.subplots(figsize=(8, 5))
+    colors = ['#d62728', '#ff9896', '#1f77b4', '#aec7e8']
+    fig, ax = plt.subplots(figsize=(9, 5))
     bars = ax.bar(labels_bar, values, color=colors, edgecolor='black', width=0.5)
     for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
-                f'{val:.2f}%', ha='center', va='bottom', fontsize=11, fontweight='bold')
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1,
+                f'{val:.2f}%', ha='center', va='bottom', fontsize=10, fontweight='bold')
     ax.set_ylabel('FAR (%)')
-    ax.set_title('Helper Data (perm) Leakage: Does it help the attacker?\n'
-                 '(Expected: all bars ≈ 0% → perm gives no authentication advantage)')
-    ax.set_ylim(0, max(max(values) * 1.5, 1.0))
+    ax.set_title('Helper Data (perm) Leakage: Perm-Aware vs Standard Attack\n'
+                 f'Pool size={expA_results.get("pool_size",10)}, 1-vs-1 fair comparison')
+    ax.set_ylim(0, max(max(values) * 1.4, 2.0))
     ax.grid(True, axis='y', alpha=0.3)
     plt.tight_layout()
     save_path = os.path.join(output_dir, "helper_known_attack.png")
