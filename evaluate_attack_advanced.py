@@ -256,22 +256,24 @@ def run_old_template_attack(binary_codes, hash_codes, labels, ctm, n_trials, rng
             embed_e = hash_codes[enroll_idx][ke2]
             stored_rgss, _ = sstm_rgss.enroll(re2, embed_e)
 
-        # Attack A: use OLD enrollment sample mapped through NEW key k2
-        # (old sample now "looks like" it was enrolled under k2, but it wasn't)
-        re_old_under_k2 = ctm.authenticate(binary_codes[enroll_idx], ke2)
-        ok_bch, _  = sstm_bch.authenticate(re_old_under_k2, stored_bch)
+        # Attack A: use OLD template re1 (generated under k1) directly as probe
+        # against T2 (enrolled under k2).
+        # re1 and re2 have ~48% Hamming distance (Genuine different-key), so
+        # BCH/RGSS cannot correct the errors → authentication fails → FAR ≈ 0%.
+        # This is the direct cancelability test: old template cannot bypass new template.
+        ok_bch, _  = sstm_bch.authenticate(re1, stored_bch)
         far_bch_A  += int(ok_bch)
         if sstm_rgss:
-            ok_rgss, _ = sstm_rgss.authenticate(re_old_under_k2, stored_rgss)
+            ok_rgss, _ = sstm_rgss.authenticate(re1, stored_rgss)
             far_rgss_A += int(ok_rgss)
 
     far_bch_A  = far_bch_A  / n_trials * 100
     far_rgss_A = (far_rgss_A / n_trials * 100) if sstm_rgss else None
 
-    print(f"    BCH  FAR (old sample vs new template) = {far_bch_A:.2f}%")
+    print(f"    BCH  FAR (old template re1 vs new template T2) = {far_bch_A:.2f}%")
     if far_rgss_A is not None:
-        print(f"    RGSS FAR (old sample vs new template) = {far_rgss_A:.2f}%")
-    print("    (Expected ≈ 0%: old sample maps to different location under new key)")
+        print(f"    RGSS FAR (old template re1 vs new template T2) = {far_rgss_A:.2f}%")
+    print("    (Expected ≈ 0%: re1 and re2 differ by ~48% Hamming → BCH/RGSS rejects)")
 
     # ── Attack B: old key used as partial hints for new key ──
     print("\n  [Attack B: Old key used as partial hints for guessing new key]")
@@ -293,16 +295,21 @@ def run_old_template_attack(binary_codes, hash_codes, labels, ctm, n_trials, rng
         overlaps.append(overlap)
 
     mean_overlap = np.mean(overlaps)
-    expected_overlap = G * G / ctm.hash_dim  # expected for independent random keys
+    # StableCTM samples ke from a stable pool of size n_stable = max(int(J * stable_ratio), G+1)
+    # For J=1024, stable_ratio=0.8: n_stable = max(819, 513) = 819
+    # Expected overlap for two independent random draws of G from n_stable: G*G/n_stable
+    n_stable = max(int(ctm.hash_dim * STABLE_RATIO), G + 1)
+    expected_overlap = G * G / n_stable
 
-    print(f"    Mean key overlap (ke1 ∩ ke2) = {mean_overlap:.1f} bits")
-    print(f"    Expected by chance (G²/J)    = {expected_overlap:.1f} bits")
+    print(f"    Mean key overlap (ke1 ∩ ke2)      = {mean_overlap:.1f} bits")
+    print(f"    Expected by chance (G²/n_stable)  = {expected_overlap:.1f} bits")
+    print(f"    (n_stable = {n_stable}, stable pool size)")
     diff = mean_overlap - expected_overlap
-    print(f"    Excess overlap               = {diff:+.1f} bits")
+    print(f"    Excess overlap                    = {diff:+.1f} bits")
     if abs(diff) < 5:
-        print("    → Keys are effectively independent (no exploitable structure)")
+        print("    → Keys are effectively independent (no exploitable structure) ✓")
     else:
-        print("    → Some key correlation detected")
+        print(f"    → Residual correlation: {diff:+.1f} bits (investigate)")
 
     return {
         "attack_A_far_BCH_%":    round(far_bch_A,  3),
@@ -377,19 +384,19 @@ def run_reliability_aware_attack(binary_codes, hash_codes, labels, ctm,
 
 def plot_reliability_aware(aware_results, output_dir):
     levels = [float(k.replace('%', '')) for k in aware_results.keys()]
-    bch_rand  = [aware_results[k]["BCH_random_%"]  for k in aware_results]
-    bch_aware = [aware_results[k]["BCH_aware_%"]   for k in aware_results]
-    rgss_rand = [aware_results[k]["RGSS_random_%"] for k in aware_results
-                 if aware_results[k]["RGSS_random_%"] is not None]
-    rgss_aware= [aware_results[k]["RGSS_aware_%"]  for k in aware_results
-                 if aware_results[k]["RGSS_aware_%"] is not None]
+    bch_rand   = [aware_results[k]["BCH_random_%"]  for k in aware_results]
+    bch_aware  = [aware_results[k]["BCH_aware_%"]   for k in aware_results]
+    # Keep all values (including 0.0 for None cases) to maintain length == len(levels)
+    rgss_rand  = [aware_results[k]["RGSS_random_%"]  or 0.0 for k in aware_results]
+    rgss_aware = [aware_results[k]["RGSS_aware_%"]   or 0.0 for k in aware_results]
+    has_rgss = any(aware_results[k]["RGSS_random_%"] is not None for k in aware_results)
 
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.plot(levels, bch_rand,  'r-o',  linewidth=2, markersize=5,
             label='BCH — random guessing')
     ax.plot(levels, bch_aware, 'r--s', linewidth=2, markersize=5,
             label='BCH — reliability-aware guessing')
-    if rgss_rand and rgss_aware:
+    if has_rgss:
         ax.plot(levels, rgss_rand,  'b-o',  linewidth=2, markersize=5,
                 label='RGSS — random guessing')
         ax.plot(levels, rgss_aware, 'b--s', linewidth=2, markersize=5,
