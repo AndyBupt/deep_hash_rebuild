@@ -29,6 +29,7 @@ import json
 import datetime
 import numpy as np
 import torch
+import bchlib
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -55,7 +56,21 @@ N_TRIALS     = 1000
 
 # SSTM operating points (GAR=50% inflection)
 BCH_M, BCH_T, BCH_K    = 9, 41, 208
-RGSS_M, RGSS_T, RGSS_K = 9, 29, 264
+# RGSS: dynamically find the correct (m, t) for k=264 to avoid bchlib version issues
+def _find_bch_t_for_k(k_bits, m=9):
+    """Find BCH(m, t) that gives exactly k_bits data capacity."""
+    for t in range(1, 60):
+        try:
+            b = bchlib.BCH(t=t, m=m)
+            k_b = (b.n - b.ecc_bits) // 8 * 8
+            if k_b == k_bits:
+                return m, t
+        except Exception:
+            break
+    return m, 29   # fallback to previously observed value
+
+RGSS_K = 264
+RGSS_M, RGSS_T = _find_bch_t_for_k(RGSS_K)
 
 # Leakage levels for old-template-assisted attack
 LEAKAGE_LEVELS = [0.0, 0.25, 0.50, 0.75, 1.0]
@@ -183,7 +198,7 @@ def compute_far_rgss_with_key(binary_codes, hash_codes, labels, ctm, ke_fn,
     """General FAR for RGSS under a custom key construction function ke_fn."""
     try:
         sstm = SSTM_PolarEmbed(G=G, k_bits=RGSS_K, m=RGSS_M, t=RGSS_T)
-    except AssertionError:
+    except Exception:
         return None
     unique_ids = np.unique(labels)
     accept = 0
@@ -231,7 +246,8 @@ def run_old_template_attack(binary_codes, hash_codes, labels, ctm, n_trials, rng
     sstm_bch  = SSTM_BCH(G=G, m=BCH_M, t=BCH_T)
     try:
         sstm_rgss = SSTM_PolarEmbed(G=G, k_bits=RGSS_K, m=RGSS_M, t=RGSS_T)
-    except AssertionError:
+    except Exception as e:
+        print(f"  RGSS init failed: {e}")
         sstm_rgss = None
 
     far_bch_A  = 0

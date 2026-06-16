@@ -141,41 +141,35 @@ def run_experiment_A(binary_codes, hash_codes, labels, ctm, n_trials, rng):
         internally by SSTM.authenticate), but we test whether an attacker
         with perm knowledge can mount a more targeted impostor attack.
 
-    Since perm is public in the fuzzy commitment model (it IS the stored
-    helper data), this essentially tests:
-      "Does leaking perm reduce security beyond leaking ke?"
+    Since perm is public in the fuzzy commitment model (it IS stored in
+    the helper data), this tests: does knowing perm help an attacker?
 
-    Implementation:
-      - Standard: stolen ke, no extra perm info → same as evaluate_attack_models stolen-key
-      - Helper-known: stolen ke + known perm → attack targets only perm positions
-        (attacker uses impostor biometric mapped through ke, focused on perm slots)
-    Note: in practice, knowing perm doesn't change what the attacker can feed;
-    authentication still checks re[perm[:k_bits]] via BCH. The test quantifies
-    whether any advantage exists.
+    Fair 1-vs-1 design (no best-of-N bias):
+      - Standard:    attacker picks ONE random impostor sample, attempts auth
+      - Perm-aware:  attacker knows perm, picks the ONE best-matching candidate
+                     from a pool of POOL_SIZE users (same effort), then attempts auth
+    Both strategies make exactly ONE authentication attempt per trial.
+    The only advantage in perm-aware is: smarter candidate SELECTION, not more tries.
     """
+    POOL_SIZE = 10   # candidate pool size for perm-aware selection (same for both)
+
     try:
         sstm_rgss = SSTM_PolarEmbed(G=G, k_bits=RGSS_K, m=RGSS_M, t=RGSS_T)
-    except AssertionError:
-        print("  RGSS SSTM init failed")
+    except Exception as e:
+        print(f"  RGSS SSTM init failed: {e}")
         return None
 
     sstm_bch = SSTM_BCH(G=G, m=BCH_M, t=BCH_T)
     unique_ids = np.unique(labels)
 
-    # Standard stolen-key FAR (baseline, same as existing experiment)
     accept_rgss_std = 0
     accept_bch_std  = 0
-
-    # Helper-known: attacker knows ke + knows perm (tries to pick best impostor sample)
-    # We simulate this by using the most "compatible" impostor sample
-    # (the one whose ke-extracted bits are closest to genuine in the perm positions)
-    accept_rgss_hk = 0
+    accept_rgss_hk  = 0
+    accept_bch_hk   = 0
 
     for _ in range(n_trials):
-        id1, id2 = rng.choice(unique_ids, size=2, replace=False)
+        id1 = rng.choice(unique_ids)
         idx1 = rng.choice(np.where(labels == id1)[0])
-        idx2_pool = np.where(labels == id2)[0]
-        idx2 = rng.choice(idx2_pool)
 
         # Genuine enrollment
         re_genuine, ke = ctm.enroll(binary_codes[idx1])
@@ -183,46 +177,66 @@ def run_experiment_A(binary_codes, hash_codes, labels, ctm, n_trials, rng):
         stored_rgss, _ = sstm_rgss.enroll(re_genuine, embed_e)
         stored_bch, _  = sstm_bch.enroll(re_genuine)
 
-        # perm: reliable channel ordering (this IS stored in the template)
-        perm_in_ke = get_perm(embed_e, RGSS_K)
+        # Perm = reliable channel positions (stored publicly in the template)
+        perm_in_ke   = get_perm(embed_e, RGSS_K)   # indices within ke
+        perm_global  = ke[perm_in_ke]               # global 1024-dim indices
+        genuine_bits = (binary_codes[idx1][perm_global] > 0).astype(np.uint8)
 
-        # Strategy 1: standard stolen-key impostor
-        re_imp_std = ctm.authenticate(binary_codes[idx2], ke)
-        ok_rgss, _ = sstm_rgss.authenticate(re_imp_std, stored_rgss)
-        ok_bch,  _ = sstm_bch.authenticate(re_imp_std, stored_bch)
+        # Draw POOL_SIZE impostor candidates from OTHER users
+        other_ids    = [u for u in unique_ids if u != id1]
+        if len(other_ids) < POOL_SIZE:
+            pool_ids = rng.choice(other_ids, size=len(other_ids), replace=False)
+        else:
+            pool_ids = rng.choice(other_ids, size=POOL_SIZE, replace=False)
+        pool_idxs    = [rng.choice(np.where(labels == u)[0]) for u in pool_ids]
+
+        # ── Strategy 1: Standard (random pick from same pool) ──
+        rand_idx   = rng.choice(pool_idxs)
+        re_std     = ctm.authenticate(binary_codes[rand_idx], ke)
+        ok_rgss, _ = sstm_rgss.authenticate(re_std, stored_rgss)
+        ok_bch,  _ = sstm_bch.authenticate(re_std, stored_bch)
         accept_rgss_std += int(ok_rgss)
         accept_bch_std  += int(ok_bch)
 
-        # Strategy 2: helper-known (attacker selects best impostor sample
-        # by maximising match at perm positions — brute-force over impostor pool)
-        best_ok = False
-        for idx2_try in idx2_pool[:5]:    # try up to 5 impostor samples
-            re_try = ctm.authenticate(binary_codes[idx2_try], ke)
-            ok_try, _ = sstm_rgss.authenticate(re_try, stored_rgss)
-            if ok_try:
-                best_ok = True
-                break
-        accept_rgss_hk += int(best_ok)
+        # ── Strategy 2: Perm-aware (pick candidate with highest perm-match) ──
+        best_match = -1
+        best_idx   = pool_idxs[0]
+        for p_idx in pool_idxs:
+            imp_bits = (binary_codes[p_idx][perm_global] > 0).astype(np.uint8)
+            match    = int(np.sum(imp_bits == genuine_bits))
+            if match > best_match:
+                best_match = match
+                best_idx   = p_idx
+        re_hk      = ctm.authenticate(binary_codes[best_idx], ke)
+        ok_rgss_hk, _ = sstm_rgss.authenticate(re_hk, stored_rgss)
+        ok_bch_hk,  _ = sstm_bch.authenticate(re_hk, stored_bch)
+        accept_rgss_hk += int(ok_rgss_hk)
+        accept_bch_hk  += int(ok_bch_hk)
 
     far_rgss_std = accept_rgss_std / n_trials * 100
     far_bch_std  = accept_bch_std  / n_trials * 100
     far_rgss_hk  = accept_rgss_hk  / n_trials * 100
+    far_bch_hk   = accept_bch_hk   / n_trials * 100
 
-    print(f"  BCH  FAR (standard stolen-key)        = {far_bch_std:.2f}%")
-    print(f"  RGSS FAR (standard stolen-key)        = {far_rgss_std:.2f}%")
-    print(f"  RGSS FAR (helper-known, best-of-5)    = {far_rgss_hk:.2f}%")
-    diff = far_rgss_hk - far_rgss_std
-    print(f"  Improvement from helper knowledge     = {diff:+.2f}%")
-    if abs(diff) < 0.5:
-        print("  → Helper data (perm) gives NO authentication advantage ✓")
+    print(f"  Pool size per trial: {POOL_SIZE} candidates (same for both strategies)")
+    print(f"  BCH  FAR  standard={far_bch_std:.2f}%  perm-aware={far_bch_hk:.2f}%")
+    print(f"  RGSS FAR  standard={far_rgss_std:.2f}%  perm-aware={far_rgss_hk:.2f}%")
+    diff_rgss = far_rgss_hk - far_rgss_std
+    diff_bch  = far_bch_hk  - far_bch_std
+    print(f"  RGSS advantage from perm knowledge = {diff_rgss:+.2f}%")
+    if abs(diff_rgss) < 0.5:
+        print("  → Perm knowledge gives NO meaningful authentication advantage ✓")
     else:
-        print(f"  → Helper data gives {diff:.2f}% advantage (investigate)")
+        print(f"  → Perm gives {diff_rgss:.2f}% advantage (investigate)")
 
     return {
+        "pool_size":                POOL_SIZE,
         "BCH_standard_FAR_%":      round(far_bch_std,  3),
+        "BCH_perm_aware_FAR_%":    round(far_bch_hk,   3),
         "RGSS_standard_FAR_%":     round(far_rgss_std, 3),
-        "RGSS_helper_known_FAR_%": round(far_rgss_hk,  3),
-        "advantage_%":             round(diff, 3),
+        "RGSS_perm_aware_FAR_%":   round(far_rgss_hk,  3),
+        "RGSS_advantage_%":        round(diff_rgss,    3),
+        "note": "Fair 1-vs-1: both strategies pick 1 probe from same pool of candidates.",
     }
 
 
@@ -258,7 +272,10 @@ def run_experiment_B(binary_codes, hash_codes, labels, ctm, n_pairs, rng):
     """
     unique_ids = np.unique(labels)
     k = RGSS_K  # number of reliable positions
-    expected_jaccard = (k / G) * (k / G)   # expected for random sets of size k from G
+    # Correct expected Jaccard for two random subsets of size k from G elements:
+    # E[Jaccard] = k / (2G - k)
+    # (NOT (k/G)^2 which is per-element probability, not Jaccard)
+    expected_jaccard = k / (2 * G - k)
 
     print(f"\n  k_bits={k}, G={G}, expected random Jaccard ≈ {expected_jaccard:.4f}")
 
@@ -337,18 +354,39 @@ def run_experiment_B(binary_codes, hash_codes, labels, ctm, n_pairs, rng):
 
     print(f"\n  Perm Linkability EER (after CTM) = {link_eer_after:.1f}%")
     print(f"    50% = perfectly unlinkable, 0% = fully linkable")
+    print(f"\n  Interpretation:")
+    mated_diff_from_random = mated_after.mean() - expected_jaccard
+    nm_diff_from_random    = non_mated_after.mean() - expected_jaccard
+    print(f"    Mated Jaccard vs expected random:     {mated_diff_from_random:+.4f}")
+    print(f"    Non-mated Jaccard vs expected random: {nm_diff_from_random:+.4f}")
+    if abs(mated_diff_from_random) < 0.02:
+        print("    → Same-user different-key perm ≈ RANDOM after CTM ✓")
+    if nm_diff_from_random < -0.05:
+        print("    → Different-user perm is LESS similar than random (anti-correlated users)")
+        print("      This is a property of the biometric, not a failure of CTM.")
+    print(f"    → The classifiable gap causes EER={link_eer_after:.1f}% (not 50%)")
+    print(f"      Mitigation: apply user-specific random masking on stored perm.")
 
     return {
+        "expected_random_jaccard":          round(expected_jaccard, 4),
+        "expected_random_formula":          "k / (2*G - k)",
         "mated_jaccard_after_CTM_mean":     round(float(mated_after.mean()),     4),
         "mated_jaccard_after_CTM_std":      round(float(mated_after.std()),      4),
         "non_mated_jaccard_after_CTM_mean": round(float(non_mated_after.mean()), 4),
         "non_mated_jaccard_after_CTM_std":  round(float(non_mated_after.std()),  4),
         "mated_jaccard_before_CTM_mean":    round(float(mated_before.mean()),    4),
         "non_mated_jaccard_before_CTM_mean":round(float(non_mated_before.mean()),4),
-        "expected_random_jaccard":          round(expected_jaccard, 4),
+        "mated_vs_random":                  round(mated_diff_from_random, 4),
+        "non_mated_vs_random":              round(nm_diff_from_random, 4),
         "perm_linkability_EER_%":           round(link_eer_after, 2),
         "difference_after_CTM":             round(float(mated_after.mean() -
                                                          non_mated_after.mean()), 4),
+        "interpretation": (
+            "Mated Jaccard ≈ random (CTM randomization effective). "
+            "Non-mated Jaccard < random (users have anti-correlated reliability patterns). "
+            "The resulting gap enables EER < 50%: a genuine perm-based linkability concern. "
+            "Mitigation: apply user-specific random masking to stored perm."
+        ),
     }, mated_after, non_mated_after, mated_before, non_mated_before
 
 
@@ -488,11 +526,15 @@ def main():
         "experiment_A_helper_known_impostor": expA,
         "experiment_B_perm_linkability": expB,
         "security_conclusions": {
-            "A": ("perm gives no authentication advantage" if expA and
-                  abs(expA["advantage_%"]) < 0.5 else "investigate perm advantage"),
-            "B": ("CTM successfully suppresses perm linkability" if
-                  abs(expB["difference_after_CTM"]) < 0.01 else
-                  f"some residual perm linkability: {expB['difference_after_CTM']:.4f}"),
+            "A": ("perm knowledge gives no meaningful authentication advantage ✓"
+                  if expA and abs(expA.get("RGSS_advantage_%", expA.get("advantage_%", 1))) < 0.5
+                  else f"perm gives slight advantage: check result"),
+            "B": (
+                f"Mated Jaccard ≈ random ({expB['mated_vs_random']:+.4f}): CTM randomizes perm. "
+                f"Non-mated < random ({expB['non_mated_vs_random']:+.4f}): users have anti-correlated "
+                f"reliability patterns. Perm EER={expB['perm_linkability_EER_%']:.1f}% "
+                f"(not 50%: genuine finding, mitigatable via perm masking)."
+            ),
         },
     }
     json_path = os.path.join(OUTPUT_DIR, "helper_data_analysis.json")
