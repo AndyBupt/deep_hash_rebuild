@@ -234,7 +234,7 @@ def evaluate_dataset(name, data_root, db_names, model, device, flip_rate_src,
     ax.plot(k_bits_rgss, gars_rgss, 'b-s', linewidth=2, markersize=4,
             label='RGSS — Reliability-Guided (Proposed)')
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'G-S Curve: BCH vs RGSS — {name}\n'
                  f'(G={G}, StableCTM, FVC2004-trained model, genuine flip={flip_rate_test*100:.1f}%)')
@@ -286,7 +286,7 @@ def plot_summary(all_results, output_dir):
                     color='#1f77b4', fontweight='bold')
 
     ax.set_xlabel('Dataset')
-    ax.set_ylabel('Security Level at GAR=50% (bits)')
+    ax.set_ylabel('Key Length at GAR=50% (bits)')
     ax.set_title('Cross-Dataset Comparison: BCH vs RGSS\n'
                  '(FVC2004-trained model, G=512 bits)')
     ax.set_xticks(x)
