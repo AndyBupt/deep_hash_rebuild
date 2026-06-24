@@ -181,7 +181,7 @@ def main():
                 label=f"{name} (flip={r['genuine_flip_rate (%)']:.1f}%)")
 
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'Ablation Study: CTM vs StableCTM vs BioHashing + BCH SSTM (G={G})')
     ax.legend(fontsize=11)

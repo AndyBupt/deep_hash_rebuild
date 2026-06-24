@@ -180,7 +180,7 @@ def run_exp1_rs_vs_bch(binary_codes, labels, ctm, output_dir):
     ax.plot(k_bits_bch, gars_bch, 'b-s', linewidth=2, markersize=4,
             label='BCH Code (Bit-level ECC)')
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'Exp 1: RS vs BCH Code (G={G} bits, StableCTM)')
     ax.legend(fontsize=11)
@@ -523,7 +523,7 @@ def run_exp4_ablation(binary_codes, hash_codes, labels,
                 linewidth=2, markersize=4,
                 label=f"{name} (flip={r['genuine_flip_rate (%)']:.1f}%)")
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'Exp 4: Ablation — Frontend Methods + BCH SSTM (G={G})')
     ax.legend(fontsize=10)
@@ -690,7 +690,7 @@ def run_exp5_sstm_comparison(binary_codes, hash_codes, labels,
         ax.plot(r["k_bits"], r["GAR (%)"],
                 style, linewidth=2, markersize=4, label=label)
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'Exp 5: SSTM Method Comparison (G={G}, StableCTM)')
     ax.legend(fontsize=10)

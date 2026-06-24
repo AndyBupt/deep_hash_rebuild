@@ -193,7 +193,7 @@ def run_gs_for_g(binary_codes, hash_codes, labels, flip_rate, G, output_dir):
             label='RGSS — Reliability-Guided (Proposed)')
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
 
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'G-S Curve: BCH vs RGSS  (G={G} bits, StableCTM)')
     ax.legend(fontsize=11)
@@ -247,7 +247,7 @@ def plot_summary(all_g_results, output_dir):
                 color='#1f77b4', fontweight='bold')
 
     ax.set_xlabel('Template Length G (bits)')
-    ax.set_ylabel('Security Level at GAR=50% (bits)')
+    ax.set_ylabel('Key Length at GAR=50% (bits)')
     ax.set_title('GAR=50% Inflection vs Template Length G\n'
                  'BCH vs RGSS (FVC2004, StableCTM)')
     ax.set_xticks(x)
@@ -278,7 +278,7 @@ def plot_combined(all_g_results, output_dir):
                     label=label)
         ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5)
         ax.set_title(f'G = {G} bits', fontsize=12)
-        ax.set_xlabel('Security Level k (bits)')
+        ax.set_xlabel('Key Length k (bits)')
         ax.grid(True, alpha=0.3)
         ax.set_ylim(-5, 108)
         ax.legend(fontsize=9)
