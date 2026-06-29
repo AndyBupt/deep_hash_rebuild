@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-06-16 16:23:43",
+  "G": 512,
+  "n_keys_per_user": 5,
+  "multiple_revocation": {
+    "all_cross_key_mean_%": 48.085,
+    "all_cross_key_std_%": 2.447,
+    "n_pairs": 960,
+    "per_round": [
+      {
+        "round": "0->1",
+        "mean_%": 48.173,
+        "std_%": 2.063,
+        "n": 96
+      },
+      {
+        "round": "1->2",
+        "mean_%": 48.061,
+        "std_%": 2.564,
+        "n": 96
+      },
+      {
+        "round": "2->3",
+        "mean_%": 48.201,
+        "std_%": 2.316,
+        "n": 96
+      },
+      {
+        "round": "3->4",
+        "mean_%": 47.793,
+        "std_%": 2.455,
+        "n": 96
+      }
+    ]
+  },
+  "formal_unlinkability": {
+    "linkability_EER_%": 35.025,
+    "Dsys": 0.045538,
+    "mated_mean_%": 48.085,
+    "mated_std_%": 2.447,
+    "non_mated_mean_%": 49.936,
+    "non_mated_std_%": 2.32,
+    "interpretation": "EER=50% \u2192 perfect unlinkability (random). Dsys=0 \u2192 distributions identical \u2192 perfectly unlinkable."
+  }
+}

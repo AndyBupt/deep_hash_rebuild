@@ -283,7 +283,7 @@ def run_ablation(binary_codes, hash_codes, labels,
                 linewidth=2, markersize=4, label=label)
 
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'RGSS Ablation: Channel-Selection Strategy Comparison\n'
                  f'G={G} bits, BCH back-end ECC, StableCTM (FVC2004)')

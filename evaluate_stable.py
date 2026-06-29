@@ -214,7 +214,7 @@ def plot_gs_curve(codes, labels, ctm, K_values, G, save_path=None):
     ax.plot(k_bits_list, gars, 'g-^', linewidth=2, markersize=4,
             label='StableCTM + RS Code')
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'G-S Curve: StableCTM (G={G} bits)')
     ax.legend(fontsize=11)

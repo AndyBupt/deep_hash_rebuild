@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-06-09 14:28:05",
+  "G": 512,
+  "n_impostor_pairs": 2000,
+  "Genuine_same_key": {
+    "mean_%": 19.55,
+    "std_%": 6.96,
+    "n": 672
+  },
+  "Impostor_same_key": {
+    "mean_%": 47.31,
+    "std_%": 11.5,
+    "n": 2000
+  },
+  "Genuine_diff_key": {
+    "mean_%": 48.44,
+    "std_%": 2.25,
+    "n": 96
+  },
+  "Impostor_diff_key": {
+    "mean_%": 49.82,
+    "std_%": 2.24,
+    "n": 2000
+  },
+  "cancelability_gap_%": 1.129,
+  "unlinkability_gap_%": 2.508
+}

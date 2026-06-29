@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-06-16 16:23:54",
+  "G": 512,
+  "k_bits": 264,
+  "n_users": 96,
+  "RGSS_selected": {
+    "mean_p_bit1": 0.496,
+    "std_p_bit1": 0.0572,
+    "mean_shannon_H": 0.9905,
+    "min_shannon_H": 0.9183,
+    "mean_min_entropy": 0.8746,
+    "fraction_H_gt_0.9": 1.0,
+    "avg_pairwise_corr": 0.0818,
+    "sum_H_upper_bound": 261.48
+  },
+  "Random_selected": {
+    "mean_p_bit1": 0.5004,
+    "std_p_bit1": 0.048,
+    "mean_shannon_H": 0.9933,
+    "mean_min_entropy": 0.9007,
+    "fraction_H_gt_0.9": 1.0,
+    "avg_pairwise_corr": 0.0816,
+    "sum_H_upper_bound": 262.24
+  },
+  "entropy_difference_RGSS_minus_Random": -0.0029,
+  "verdict": "RGSS entropy \u2248 random \u2192 'reliable \u2260 predictable' CONFIRMED \u2713"
+}

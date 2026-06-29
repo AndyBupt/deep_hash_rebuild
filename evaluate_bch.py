@@ -161,7 +161,7 @@ def plot_rs_vs_bch(k_rs, gars_rs, k_bch, gars_bch, G, save_path=None):
             label='BCH Code (Bit-level ECC)')
 
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'G-S Curve: RS vs BCH (G={G} bits)\n'
                  f'[k = security bits; same GAR for both stolen/unknown key scenarios]')
@@ -219,7 +219,7 @@ def plot_all_G_comparison(all_results, output_dir):
         ax.plot(k_bch, gars_bch, 'b-s', linewidth=2, markersize=3,
                 label='BCH Code')
         ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5)
-        ax.set_xlabel('Security Level k (bits)')
+        ax.set_xlabel('Key Length k (bits)')
         ax.set_ylabel('GAR (%)' if G == all_results[0][0] else '')
         ax.set_title(f'G={G} bits')
         ax.legend(fontsize=9)

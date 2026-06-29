@@ -7,7 +7,7 @@ Metrics:
   - GAR@FAR (Genuine Accept Rate at given False Accept Rate)
   - ROC Curve
   - Genuine/Impostor Hamming Distance Distribution
-  - G-S Curve (GAR vs. Security Level in bits)
+  - G-S Curve (GAR vs. Key Length in bits)
   - Comparison: Baseline CTM vs. Improved StableCTM
 """
 
@@ -277,7 +277,7 @@ def plot_gs_curve_comparison(codes, labels, ctm_baseline, ctm_improved,
                 label='Improved (Stable Bit Selection)')
 
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     title = f'G-S Curve: Baseline vs. Improved CTM (G={G} bits)'
     if ctm_improved is None:

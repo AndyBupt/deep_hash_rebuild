@@ -200,7 +200,7 @@ def plot_comparison(results, G, output_dir):
                 style, linewidth=2, markersize=4, label=label)
 
     ax.axhline(y=50, color='gray', linestyle='--', alpha=0.5, label='GAR=50%')
-    ax.set_xlabel('Security Level k (bits)')
+    ax.set_xlabel('Key Length k (bits)')
     ax.set_ylabel('GAR (%)')
     ax.set_title(f'G-S Curve: BCH vs Polar Code SSTM (G={G}, StableCTM)')
     ax.legend(fontsize=10)

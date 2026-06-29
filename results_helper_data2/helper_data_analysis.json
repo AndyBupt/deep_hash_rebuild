@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-06-16 17:06:00",
+  "G": 512,
+  "RGSS_k_bits": 264,
+  "n_trials": 1000,
+  "experiment_A_helper_known_impostor": {
+    "pool_size": 10,
+    "BCH_standard_FAR_%": 0.9,
+    "BCH_perm_aware_FAR_%": 11.0,
+    "RGSS_standard_FAR_%": 0.8,
+    "RGSS_perm_aware_FAR_%": 9.3,
+    "RGSS_advantage_%": 8.5,
+    "note": "Fair 1-vs-1: both strategies pick 1 probe from same pool of candidates."
+  },
+  "experiment_B_perm_linkability": {
+    "expected_random_jaccard": 0.3474,
+    "expected_random_formula": "k / (2*G - k)",
+    "mated_jaccard_after_CTM_mean": 0.3501,
+    "mated_jaccard_after_CTM_std": 0.0509,
+    "non_mated_jaccard_after_CTM_mean": 0.2223,
+    "non_mated_jaccard_after_CTM_std": 0.0374,
+    "mated_jaccard_before_CTM_mean": 0.3865,
+    "non_mated_jaccard_before_CTM_mean": 0.2888,
+    "mated_vs_random": 0.0028,
+    "non_mated_vs_random": -0.1251,
+    "perm_linkability_EER_%": 9.29,
+    "difference_after_CTM": 0.1279,
+    "interpretation": "Mated Jaccard \u2248 random (CTM randomization effective). Non-mated Jaccard < random (users have anti-correlated reliability patterns). The resulting gap enables EER < 50%: a genuine perm-based linkability concern. Mitigation: apply user-specific random masking to stored perm."
+  },
+  "security_conclusions": {
+    "A": "perm gives slight advantage: check result",
+    "B": "Mated Jaccard \u2248 random (+0.0028): CTM randomizes perm. Non-mated < random (-0.1251): users have anti-correlated reliability patterns. Perm EER=9.3% (not 50%: genuine finding, mitigatable via perm masking)."
+  }
+}

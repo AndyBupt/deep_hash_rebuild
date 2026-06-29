@@ -276,7 +276,7 @@ def run_exp3_gs(codes, labels, ctm_stable, ctm_bh, output_dir):
                 linewidth=2, markersize=4, label=name)
 
     ax.axhline(y=50, color="gray", linestyle="--", alpha=0.5, label="GAR=50%")
-    ax.set_xlabel("Security Level k (bits)")
+    ax.set_xlabel("Key Length k (bits)")
     ax.set_ylabel("GAR (%)")
     ax.set_title(f"G-S Curve: BioHashing vs StableCTM + BCH SSTM (G={G})")
     ax.legend(fontsize=11)

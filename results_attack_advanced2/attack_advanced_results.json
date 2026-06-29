@@ -1,0 +1,54 @@
+{
+  "timestamp": "2026-06-16 17:01:08",
+  "G": 512,
+  "n_trials": 1000,
+  "BCH_operating_point": {
+    "m": 9,
+    "t": 41,
+    "k_bits": 208
+  },
+  "RGSS_operating_point": {
+    "m": 9,
+    "t": 29,
+    "k_bits": 264
+  },
+  "attack1_old_template_assisted": {
+    "attack_A_far_BCH_%": 0.0,
+    "attack_A_far_RGSS_%": null,
+    "mean_key_overlap": 319.67,
+    "expected_key_overlap": 320.08,
+    "excess_overlap": -0.41
+  },
+  "attack2_reliability_aware": {
+    "0%": {
+      "BCH_random_%": 0.0,
+      "BCH_aware_%": 0.0,
+      "RGSS_random_%": null,
+      "RGSS_aware_%": null
+    },
+    "25%": {
+      "BCH_random_%": 0.0,
+      "BCH_aware_%": 0.0,
+      "RGSS_random_%": null,
+      "RGSS_aware_%": null
+    },
+    "50%": {
+      "BCH_random_%": 0.0,
+      "BCH_aware_%": 0.0,
+      "RGSS_random_%": null,
+      "RGSS_aware_%": null
+    },
+    "75%": {
+      "BCH_random_%": 0.0,
+      "BCH_aware_%": 0.0,
+      "RGSS_random_%": null,
+      "RGSS_aware_%": null
+    },
+    "100%": {
+      "BCH_random_%": 0.8,
+      "BCH_aware_%": 1.3,
+      "RGSS_random_%": 0.9,
+      "RGSS_aware_%": 0.8
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-04-09 00:08:57",
+  "G": 128,
+  "ctm": "StableCTM(stable_ratio=0.8)",
+  "note": "GAR is the same for both stolen_key and unknown_key scenarios. The two scenarios differ only in security interpretation of k.",
+  "RS": {
+    "k_bits": [
+      56,
+      72,
+      88,
+      104,
+      120
+    ],
+    "GAR (%)": [
+      0.89,
+      0.15,
+      0.15,
+      0.0,
+      0.0
+    ]
+  },
+  "BCH": {
+    "k_bits": [
+      120,
+      128
+    ],
+    "GAR (%)": [
+      99.85,
+      99.4
+    ]
+  }
+}

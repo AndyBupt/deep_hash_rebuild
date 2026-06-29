@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-06-16 16:24:08",
+  "G": 512,
+  "RGSS_k_bits": 264,
+  "n_trials": 1000,
+  "experiment_A_helper_known_impostor": {
+    "BCH_standard_FAR_%": 1.8,
+    "RGSS_standard_FAR_%": 1.2,
+    "RGSS_helper_known_FAR_%": 2.6,
+    "advantage_%": 1.4
+  },
+  "experiment_B_perm_linkability": {
+    "mated_jaccard_after_CTM_mean": 0.3516,
+    "mated_jaccard_after_CTM_std": 0.0537,
+    "non_mated_jaccard_after_CTM_mean": 0.2217,
+    "non_mated_jaccard_after_CTM_std": 0.0393,
+    "mated_jaccard_before_CTM_mean": 0.3865,
+    "non_mated_jaccard_before_CTM_mean": 0.2889,
+    "expected_random_jaccard": 0.2659,
+    "perm_linkability_EER_%": 9.19,
+    "difference_after_CTM": 0.1299
+  },
+  "security_conclusions": {
+    "A": "investigate perm advantage",
+    "B": "some residual perm linkability: 0.1299"
+  }
+}

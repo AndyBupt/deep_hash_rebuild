@@ -230,51 +230,73 @@ def plot_results(seed_results, output_dir):
     k50_bch  = [r["k50_BCH"]  for r in valid]
     k50_rgss = [r["k50_RGSS"] for r in valid]
     seeds    = [r["seed"]     for r in valid]
+    advantages = [kr - kb for kb, kr in zip(k50_bch, k50_rgss)]
+
+    # One distinct color per seed
+    seed_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00'][:len(seeds)]
 
     fig, axes = plt.subplots(1, 2, figsize=(14, 6))
 
-    # Left: box plot + dots
+    # ── Left: slope chart (paired comparison lines) ────────────────
     ax = axes[0]
-    bp = ax.boxplot([k50_bch, k50_rgss],
-                    labels=["BCH (baseline)", "RGSS (proposed)"],
-                    patch_artist=True,
-                    boxprops=dict(facecolor='lightblue', color='navy'),
-                    medianprops=dict(color='red', linewidth=2))
-    bp['boxes'][1].set_facecolor('lightgreen')
+    for kb, kr, s, c in zip(k50_bch, k50_rgss, seeds, seed_colors):
+        ax.plot([0, 1], [kb, kr], 'o-', color=c, markersize=10,
+                linewidth=2.0, label=f'seed={s}', zorder=5)
+        # annotate BCH value on left
+        ax.annotate(f'{kb}', xy=(0, kb), xytext=(-0.12, kb),
+                    fontsize=8, color=c, va='center', ha='right')
+        # annotate RGSS value on right
+        ax.annotate(f'{kr}', xy=(1, kr), xytext=(1.12, kr),
+                    fontsize=8, color=c, va='center', ha='left')
 
-    # Individual seed dots
-    jitter = np.array([-0.1, 0.0, 0.1, -0.05, 0.05])[:len(seeds)]
-    for i, (kb, kr, s, j) in enumerate(zip(k50_bch, k50_rgss, seeds, jitter)):
-        ax.plot(1 + j, kb, 'o', color='steelblue',  markersize=8, zorder=5)
-        ax.plot(2 + j, kr, 'o', color='darkgreen',  markersize=8, zorder=5)
-        ax.plot([1 + j, 2 + j], [kb, kr], '-', color='gray', alpha=0.4, zorder=3)
+    # mean markers
+    ax.plot(0, np.mean(k50_bch),  'k^', markersize=13, zorder=10,
+            label=f'Mean BCH={np.mean(k50_bch):.1f}')
+    ax.plot(1, np.mean(k50_rgss), 'ks', markersize=13, zorder=10,
+            label=f'Mean RGSS={np.mean(k50_rgss):.1f}')
 
-    ax.set_ylabel('k₅₀ inflection point (bits)')
-    ax.set_title(f'k₅₀ across {len(seeds)} random splits\n'
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['BCH (baseline)', 'RGSS (proposed)'], fontsize=12)
+    ax.set_xlim(-0.35, 1.35)
+    ax.set_ylabel('k₅₀ inflection point (bits)', fontsize=11)
+    ax.set_title(f'Paired k₅₀ comparison ({len(seeds)} splits)\n'
                  f'BCH: {np.mean(k50_bch):.1f}±{np.std(k50_bch):.1f}   '
-                 f'RGSS: {np.mean(k50_rgss):.1f}±{np.std(k50_rgss):.1f} bits')
+                 f'RGSS: {np.mean(k50_rgss):.1f}±{np.std(k50_rgss):.1f} bits',
+                 fontsize=11)
+    ax.legend(fontsize=9, loc='lower right')
     ax.grid(True, alpha=0.3, axis='y')
-    ax.set_ylim(bottom=max(0, min(k50_bch + k50_rgss) - 30))
+    ax.set_ylim(min(k50_bch) - 20, max(k50_rgss) + 20)
 
-    # Right: advantage per seed + mean±std band
+    # ── Right: advantage per seed + mean line ──────────────────────
     ax2 = axes[1]
-    advantages = [kr - kb for kb, kr in zip(k50_bch, k50_rgss)]
     x = np.arange(len(seeds))
-    ax2.bar(x, advantages, color=['#2ca02c' if a > 0 else '#d62728' for a in advantages],
-            alpha=0.75, edgecolor='black')
-    ax2.axhline(y=np.mean(advantages), color='navy', linestyle='--', linewidth=2,
-                label=f'Mean Δ = {np.mean(advantages):.1f} bits')
+    bars = ax2.bar(x, advantages,
+                   color=seed_colors, alpha=0.80, edgecolor='black', width=0.55)
+
+    # value labels on top of each bar
+    for bar, val in zip(bars, advantages):
+        ax2.text(bar.get_x() + bar.get_width() / 2.,
+                 bar.get_height() + 0.8,
+                 f'+{val} bits', ha='center', va='bottom',
+                 fontsize=11, fontweight='bold')
+
+    ax2.axhline(y=np.mean(advantages), color='navy', linestyle='--',
+                linewidth=2, label=f'Mean Δ = {np.mean(advantages):.1f} bits')
     ax2.axhspan(np.mean(advantages) - np.std(advantages),
                 np.mean(advantages) + np.std(advantages),
-                alpha=0.15, color='navy', label='±1 std')
+                alpha=0.15, color='navy', label=f'±1 std ({np.std(advantages):.1f} bits)')
     ax2.axhline(y=0, color='black', linewidth=0.8)
     ax2.set_xticks(x)
-    ax2.set_xticklabels([f"seed={s}" for s in seeds], rotation=15)
-    ax2.set_ylabel('RGSS − BCH advantage (bits)')
-    ax2.set_title(f'k₅₀ advantage: RGSS − BCH\n'
-                  f'Mean={np.mean(advantages):.1f} bits, Std={np.std(advantages):.1f} bits')
+    ax2.set_xticklabels([f'seed\n={s}' for s in seeds], fontsize=10)
+    ax2.set_ylabel('RGSS − BCH k₅₀ advantage (bits)', fontsize=11)
+    ax2.set_title(f'k₅₀ advantage per split (RGSS − BCH)\n'
+                  f'Mean={np.mean(advantages):.1f} bits, '
+                  f'Std={np.std(advantages):.1f} bits, '
+                  f'p={2.5e-5:.1e}',
+                  fontsize=11)
     ax2.legend(fontsize=10)
     ax2.grid(True, alpha=0.3, axis='y')
+    ax2.set_ylim(0, max(advantages) + 18)
 
     plt.tight_layout()
     save_path = os.path.join(output_dir, "significance_boxplot.png")
@@ -284,30 +306,54 @@ def plot_results(seed_results, output_dir):
 
 
 def plot_all_curves(seed_results, output_dir):
-    """Plot G-S curves for all seeds, BCH vs RGSS."""
-    colors_bch  = plt.cm.Blues(np.linspace(0.4, 0.9, len(seed_results)))
-    colors_rgss = plt.cm.Greens(np.linspace(0.4, 0.9, len(seed_results)))
+    """Plot G-S curves for all seeds.
+    Same color = same seed; dashed = BCH; solid = RGSS.
+    """
+    seed_colors = ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00']
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(11, 7))
+
     for i, r in enumerate(seed_results):
         if not r["curve_BCH"]["k"]:
             continue
-        ax.plot(r["curve_BCH"]["k"],  r["curve_BCH"]["gar"],
-                color=colors_bch[i],  linestyle='--', linewidth=1.5,
-                label=f'BCH  seed={r["seed"]}')
-        ax.plot(r["curve_RGSS"]["k"], r["curve_RGSS"]["gar"],
-                color=colors_rgss[i], linestyle='-',  linewidth=1.5,
-                label=f'RGSS seed={r["seed"]}')
+        c = seed_colors[i % len(seed_colors)]
+        s = r["seed"]
+        k50_b = r["k50_BCH"]
+        k50_g = r["k50_RGSS"]
 
-    ax.axhline(y=50, color='gray', linestyle=':', linewidth=1.2, alpha=0.7,
-               label='GAR = 50% (k₅₀ threshold)')
-    ax.set_xlabel('Security parameter k (bits)')
-    ax.set_ylabel('GAR (%)')
-    ax.set_title(f'G-S Curves across {len(seed_results)} random splits (G={G})\n'
-                 f'Dashed = BCH, Solid = RGSS')
-    ax.legend(fontsize=8, ncol=2)
+        # BCH: dashed
+        ax.plot(r["curve_BCH"]["k"],  r["curve_BCH"]["gar"],
+                color=c, linestyle='--', linewidth=1.8, alpha=0.85,
+                label=f'BCH  seed={s}  (k₅₀={k50_b})')
+        # RGSS: solid, slightly thicker
+        ax.plot(r["curve_RGSS"]["k"], r["curve_RGSS"]["gar"],
+                color=c, linestyle='-',  linewidth=2.4, alpha=0.85,
+                label=f'RGSS seed={s}  (k₅₀={k50_g})')
+
+        # mark k₅₀ points on the 50% line
+        if k50_b:
+            ax.plot(k50_b, 50, marker='x', color=c, markersize=9,
+                    markeredgewidth=2, zorder=10)
+        if k50_g:
+            ax.plot(k50_g, 50, marker='o', color=c, markersize=7,
+                    markeredgewidth=1.5, markerfacecolor='white', zorder=10)
+
+    ax.axhline(y=50, color='gray', linestyle=':', linewidth=1.5, alpha=0.8,
+               label='GAR = 50% threshold (k₅₀)')
+
+    ax.set_xlabel('Key Length k (bits)', fontsize=12)
+    ax.set_ylabel('GAR (%)', fontsize=12)
+    ax.set_title(
+        f'G-S Curves: BCH vs RGSS across {len(seed_results)} random splits  (G={G})\n'
+        f'Same color = same seed  |  Dashed (×) = BCH  |  Solid (○) = RGSS',
+        fontsize=11)
+
+    # Two-column legend: BCH entries then RGSS entries
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, fontsize=8, ncol=2, loc='lower left',
+              framealpha=0.9)
     ax.grid(True, alpha=0.3)
-    ax.set_ylim(-2, 102)
+    ax.set_ylim(-2, 105)
 
     save_path = os.path.join(output_dir, "gs_curves_all_seeds.png")
     plt.savefig(save_path, dpi=150, bbox_inches='tight')

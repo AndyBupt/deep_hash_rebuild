@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-06-16 17:41:52",
+  "G": 512,
+  "seeds": [
+    42,
+    123,
+    456,
+    789,
+    1024
+  ],
+  "n_valid_seeds": 5,
+  "BCH": {
+    "k50_per_seed": [
+      208,
+      216,
+      224,
+      224,
+      224
+    ],
+    "mean_k50": 219.2,
+    "std_k50": 6.4
+  },
+  "RGSS": {
+    "k50_per_seed": [
+      256,
+      272,
+      288,
+      280,
+      280
+    ],
+    "mean_k50": 275.2,
+    "std_k50": 10.85
+  },
+  "advantage_RGSS_minus_BCH": {
+    "per_seed": [
+      48,
+      56,
+      64,
+      56,
+      56
+    ],
+    "mean": 56.0,
+    "std": 5.06
+  },
+  "paired_ttest": {
+    "t_statistic": 22.1359,
+    "p_value": 2.5e-05,
+    "significant_at_0.05": true
+  },
+  "per_seed_detail": [
+    {
+      "seed": 42,
+      "n_test_users": 96,
+      "k50_BCH": 208,
+      "k50_RGSS": 256,
+      "advantage": 48
+    },
+    {
+      "seed": 123,
+      "n_test_users": 96,
+      "k50_BCH": 216,
+      "k50_RGSS": 272,
+      "advantage": 56
+    },
+    {
+      "seed": 456,
+      "n_test_users": 96,
+      "k50_BCH": 224,
+      "k50_RGSS": 288,
+      "advantage": 64
+    },
+    {
+      "seed": 789,
+      "n_test_users": 96,
+      "k50_BCH": 224,
+      "k50_RGSS": 280,
+      "advantage": 56
+    },
+    {
+      "seed": 1024,
+      "n_test_users": 96,
+      "k50_BCH": 224,
+      "k50_RGSS": 280,
+      "advantage": 56
+    }
+  ]
+}
