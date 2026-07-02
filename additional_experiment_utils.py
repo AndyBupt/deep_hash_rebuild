@@ -11,6 +11,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 import torch
+from scipy.stats import gaussian_kde
 from sklearn.metrics import roc_curve
 
 from dataset import build_dataloaders
@@ -153,3 +154,50 @@ def find_bch_params_for_k(k_bits: int, m: int = 9, max_t: int = 60) -> Tuple[int
 def summarise_k50(k_bits_list, gars, threshold: float = 50.0):
     valid = [k for k, g in zip(k_bits_list, gars) if g >= threshold]
     return valid[-1] if valid else None
+
+
+def make_density_curve(values, x_min=0.0, x_max=1.0, n_points: int = 300,
+                       bw_method=0.08, jitter_std: float = 1e-4):
+    """
+    Robust density curve helper.
+
+    gaussian_kde may fail when values are nearly constant or lie on a singular
+    low-dimensional subspace. This helper falls back gracefully so plotting does
+    not crash during large experiment runs.
+    """
+    x = np.linspace(x_min, x_max, n_points)
+    values = np.asarray(values, dtype=np.float64)
+    values = values[np.isfinite(values)]
+
+    if values.size == 0:
+        return x, np.zeros_like(x)
+
+    # Degenerate / near-constant case: draw a narrow Gaussian bump manually.
+    if values.size < 2 or np.std(values) < 1e-10 or np.unique(values).size < 2:
+        mu = float(values.mean())
+        sigma = max(jitter_std * 10, (x_max - x_min) / 250.0)
+        y = np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+        area = np.trapezoid(y, x)
+        if area > 0:
+            y = y / area
+        return x, y
+
+    try:
+        kde = gaussian_kde(values, bw_method=bw_method)
+        y = kde(x)
+        return x, y
+    except Exception:
+        # Retry with tiny jitter to break exact singularity.
+        try:
+            rng = np.random.default_rng(42)
+            jittered = values + rng.normal(0.0, jitter_std, size=values.shape)
+            kde = gaussian_kde(jittered, bw_method=bw_method)
+            y = kde(x)
+            return x, y
+        except Exception:
+            # Final fallback: histogram density + interpolation.
+            bins = min(30, max(10, int(np.sqrt(values.size))))
+            hist, edges = np.histogram(values, bins=bins, range=(x_min, x_max), density=True)
+            mids = 0.5 * (edges[:-1] + edges[1:])
+            y = np.interp(x, mids, hist, left=0.0, right=0.0)
+            return x, y

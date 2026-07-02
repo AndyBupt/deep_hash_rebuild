@@ -29,7 +29,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import gaussian_kde
 
 from additional_experiment_utils import (
     DEFAULT_DATA_ROOT,
@@ -40,6 +39,7 @@ from additional_experiment_utils import (
     extract_codes_with_embed,
     find_bch_params_for_k,
     load_model_and_dataloaders,
+    make_density_curve,
     parse_rgss_template,
 )
 from ctm import StableCTM
@@ -156,7 +156,6 @@ def run_experiment(binary_codes, hash_codes, labels, ctm, sstm, rng):
 
 
 def plot_public_vs_protected(results):
-    x = np.linspace(0, 1, 300)
     fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
     for ax, mated, non_mated, title in [
         (axes[0], results['public_mated'], results['public_non'],
@@ -164,12 +163,12 @@ def plot_public_vs_protected(results):
         (axes[1], results['protected_mated'], results['protected_non'],
          f'Protected R token (EER={results["protected_eer"]:.1f}%)'),
     ]:
-        kde_m = gaussian_kde(mated, bw_method=0.07)
-        kde_n = gaussian_kde(non_mated, bw_method=0.07)
-        ax.plot(x, kde_m(x), 'b-', linewidth=2, label=f'Mated μ={mated.mean():.3f}')
-        ax.plot(x, kde_n(x), 'r--', linewidth=2, label=f'Non-mated μ={non_mated.mean():.3f}')
-        ax.fill_between(x, kde_m(x), color='blue', alpha=0.12)
-        ax.fill_between(x, kde_n(x), color='red', alpha=0.12)
+        x, y_m = make_density_curve(mated, x_min=0.0, x_max=1.0, n_points=300, bw_method=0.07)
+        _, y_n = make_density_curve(non_mated, x_min=0.0, x_max=1.0, n_points=300, bw_method=0.07)
+        ax.plot(x, y_m, 'b-', linewidth=2, label=f'Mated μ={mated.mean():.3f}')
+        ax.plot(x, y_n, 'r--', linewidth=2, label=f'Non-mated μ={non_mated.mean():.3f}')
+        ax.fill_between(x, y_m, color='blue', alpha=0.12)
+        ax.fill_between(x, y_n, color='red', alpha=0.12)
         ax.set_title(title)
         ax.set_xlabel('Similarity score')
         ax.grid(True, alpha=0.3)
@@ -181,14 +180,13 @@ def plot_public_vs_protected(results):
 
 
 def plot_helper_distance(results):
-    x = np.linspace(0, 1, 300)
     fig, ax = plt.subplots(figsize=(7, 5))
-    kde_m = gaussian_kde(results['helper_mated'], bw_method=0.07)
-    kde_n = gaussian_kde(results['helper_non'], bw_method=0.07)
-    ax.plot(x, kde_m(x), 'b-', linewidth=2, label=f'Mated μ={results["helper_mated"].mean():.3f}')
-    ax.plot(x, kde_n(x), 'r--', linewidth=2, label=f'Non-mated μ={results["helper_non"].mean():.3f}')
-    ax.fill_between(x, kde_m(x), color='blue', alpha=0.12)
-    ax.fill_between(x, kde_n(x), color='red', alpha=0.12)
+    x, y_m = make_density_curve(results['helper_mated'], x_min=0.0, x_max=1.0, n_points=300, bw_method=0.07)
+    _, y_n = make_density_curve(results['helper_non'], x_min=0.0, x_max=1.0, n_points=300, bw_method=0.07)
+    ax.plot(x, y_m, 'b-', linewidth=2, label=f'Mated μ={results["helper_mated"].mean():.3f}')
+    ax.plot(x, y_n, 'r--', linewidth=2, label=f'Non-mated μ={results["helper_non"].mean():.3f}')
+    ax.fill_between(x, y_m, color='blue', alpha=0.12)
+    ax.fill_between(x, y_n, color='red', alpha=0.12)
     ax.set_xlabel('Normalised Hamming distance of helper h')
     ax.set_ylabel('Probability density')
     ax.set_title(f'Helper-template distance linkability (EER={results["helper_eer"]:.1f}%)')

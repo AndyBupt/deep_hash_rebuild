@@ -39,7 +39,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.stats import gaussian_kde
 
 from additional_experiment_utils import (
     DEFAULT_DATA_ROOT,
@@ -47,6 +46,7 @@ from additional_experiment_utils import (
     ensure_dir,
     extract_codes_with_embed,
     load_model_and_dataloaders,
+    make_density_curve,
     parse_rgss_template,
     compute_eer_from_scores,
     find_bch_params_for_k,
@@ -277,7 +277,6 @@ def plot_cumulative(results):
 
 
 def plot_linkability(results):
-    x = np.linspace(0, 1, 300)
     fig, axes = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
 
     for ax, mated, non_mated, title in [
@@ -286,12 +285,12 @@ def plot_linkability(results):
         (axes[1], results['mated_inter_jaccard'], results['non_inter_jaccard'],
          f'Intersection-of-records linkability (EER={results["link_eer_intersection"]:.1f}%)'),
     ]:
-        kde_m = gaussian_kde(mated, bw_method=0.08)
-        kde_n = gaussian_kde(non_mated, bw_method=0.08)
-        ax.plot(x, kde_m(x), 'b-', linewidth=2, label=f'Mated μ={mated.mean():.3f}')
-        ax.plot(x, kde_n(x), 'r--', linewidth=2, label=f'Non-mated μ={non_mated.mean():.3f}')
-        ax.fill_between(x, kde_m(x), color='blue', alpha=0.12)
-        ax.fill_between(x, kde_n(x), color='red', alpha=0.12)
+        x, y_m = make_density_curve(mated, x_min=0.0, x_max=1.0, n_points=300, bw_method=0.08)
+        _, y_n = make_density_curve(non_mated, x_min=0.0, x_max=1.0, n_points=300, bw_method=0.08)
+        ax.plot(x, y_m, 'b-', linewidth=2, label=f'Mated μ={mated.mean():.3f}')
+        ax.plot(x, y_n, 'r--', linewidth=2, label=f'Non-mated μ={non_mated.mean():.3f}')
+        ax.fill_between(x, y_m, color='blue', alpha=0.12)
+        ax.fill_between(x, y_n, color='red', alpha=0.12)
         ax.grid(True, alpha=0.3)
         ax.set_xlabel('Jaccard similarity')
         ax.set_title(title)
