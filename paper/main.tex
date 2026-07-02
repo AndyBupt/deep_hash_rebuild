@@ -84,13 +84,13 @@ GAR--key-length tradeoff than uniform BCH, advancing the
 $k_{50}$ inflection point from 208\,bits to 264\,bits on FVC2004
 (275.2\,bits on average across five independent subject splits)
 and gaining up to $+$80\,bits on unseen datasets.
-We further demonstrate that RGSS maintains revocability,
-template-level unlinkability (D$_\text{sys}\!=\!0.046$ under the
-evaluated protocol), and resistance to advanced attacks including
-old-template-assisted and reliability-aware guessing, while
-preserving per-bit entropy
+We further show that RGSS preserves revocability, yields low
+template-level linkability under the evaluated protocol
+(D$_\text{sys}\!=\!0.046$), and shows no successful attacks under
+the evaluated old-template-assisted and reliability-aware guessing
+settings up to 90\% key leakage, while preserving per-bit entropy
 ($H_{\text{RGSS}} \approx H_{\text{random}}$, difference $<\!0.003$\,bits).
-Extensive experiments on FVC2004, FVC2002, and FVC2006 confirm the
+Extensive experiments on FVC2004, FVC2002, and FVC2006 support the
 consistency and statistical significance of the proposed approach
 (paired $t$-test, $p\!<\!0.001$).
 \end{abstract}
@@ -172,14 +172,14 @@ errors within the key region drops from $\bar{p} \cdot k$
 well within the BCH correction capacity of $t\!\approx\!27$\,bits
 at $k\!=\!264$.
 
-\subsection*{Verification: GAR--Key-Length Tradeoff, Entropy, Security}
+\subsection*{Verification: GAR--Key-Length Tradeoff, Entropy, and Security Evaluation}
 
 We systematically validate RGSS across six complementary dimensions:
 (i) the GAR--key-length ($k_{50}$) tradeoff, with $+56$\,bits gain
 over BCH on FVC2004 and up to $+80$\,bits on unseen datasets;
 (ii) an ablation study over five channel-selection strategies showing
 that sample-level tanh confidence strictly outperforms flip-rate
-statistics and even the test-set flip-rate oracle baseline;
+statistics and even the test-set population flip-rate baseline;
 (iii) formal unlinkability analysis ($D_\text{sys}\!=\!0.046$,
 linkability EER\,$=35\%$, multi-revocation stability);
 (iv) advanced attack evaluation including old-template-assisted
@@ -208,7 +208,7 @@ The main contributions of this paper are:
   \item We systematically evaluate RGSS on authentication accuracy,
   revocability, formal unlinkability, partial key leakage, stolen-key
   security, entropy preservation, and cross-dataset generalization,
-  providing a comprehensive security analysis for deep fingerprint
+  providing a broad security evaluation for deep fingerprint
   template protection.
 \end{enumerate}
 
@@ -231,6 +231,10 @@ Cancelable biometric schemes \cite{ratha2001enhancing,patel2015cancelable}
 apply a user-specific non-invertible transformation to raw templates,
 so that a compromised template can be revoked by updating the
 transformation parameter without re-enrolling the user.
+Broad surveys of biometric template protection and cancelable
+biometrics further summarize the design tradeoffs between
+revocability, recognition accuracy, and information leakage
+\cite{rathgeb2011survey}.
 Early methods include random projection (BioHashing
 \cite{teoh2004biohashing,kong2006biohashing}), salting, and
 permutation-based transforms.
@@ -258,6 +262,9 @@ different threat model.
 Biometric cryptosystems bind a cryptographic key to a biometric
 template using information-theoretic tools, so that the key can only
 be recovered by a genuine probe \cite{rane2013secure}.
+The secure-sketch and fuzzy-extractor formalism provides a general
+theoretical basis for deriving stable keys from noisy biometric data
+\cite{dodis2008fuzzy}.
 Fuzzy commitment \cite{juels1999fuzzy} encodes the key as the
 difference between the biometric and a codeword; the error-correcting
 code recovers the key if the probe is close enough to the enrollment
@@ -299,9 +306,9 @@ network's confidence that the $i$-th bit will be stable across
 acquisitions.
 Bits with large $|\tanh(z_i)|$ lie near $\pm 1$ and flip rarely;
 bits near zero are uncertain and flip frequently.
-To the best of our knowledge, no prior work has used this sample-wise
-reliability signal to guide the channel selection of a secure sketch,
-which is precisely the contribution of RGSS.
+We are not aware of prior work that explicitly uses this sample-wise
+reliability signal to guide secure-sketch channel selection for deep
+binary fingerprint templates, which is the setting addressed here.
 
 \subsection{Unlinkability and Security Analysis}
 
@@ -319,6 +326,12 @@ measure $D_\text{sys}$ and the local linkability curve $D(s)$.
 We adopt both metrics in Section~\ref{sec:exp:unlink} to provide a
 rigorous unlinkability evaluation beyond the heuristic ``gap''
 metrics reported in many prior works.
+Related work has also shown that fuzzy-commitment-style systems can
+be vulnerable to decodability-based cross-matching and statistical
+attacks when auxiliary information or correlated records are exposed
+\cite{kelkboom2011preventing,rathgeb2012statistical}.
+These observations motivate our separate analysis of helper-data
+leakage and revocation-induced linkability.
 
 \subsection{Positioning}
 \label{sec:related:position}
@@ -331,10 +344,10 @@ are not designed for deep binary templates.
 ECC-based methods (Fuzzy Commitment, Talreja~\etal) lack either
 revocability or the sample-adaptive channel selection that allows
 RGSS to maximise GAR without sacrificing unlinkability.
-To our knowledge, RGSS is among the few methods to jointly address
+Within the representative methods considered here, RGSS combines
 (i)~compatibility with deep binary features,
 (ii)~reliability-guided ECC channel selection for high GAR, and
-(iii)~template-level unlinkability verified under the
+(iii)~template-level unlinkability evaluated under the
 Gomez-Barrero~\etal\ framework~\cite{gomez2017unlinkability}.
 
 \begin{table}[!t]
@@ -342,7 +355,7 @@ Gomez-Barrero~\etal\ framework~\cite{gomez2017unlinkability}.
   \caption{Qualitative comparison of representative template protection
   methods.
   \textbf{Revocable}: user-specific key enables template renewal.
-  \textbf{Formal $\mathcal{U}$}: unlinkability formally verified
+  \textbf{Formal $\mathcal{U}$}: unlinkability formally assessed
   ($D_\text{sys} \approx 0$).
   \textbf{Deep}: natively suited to deep binary features.
   \textbf{Reliability}: sample-adaptive channel selection.}
@@ -394,7 +407,7 @@ benefit with negligible impact on genuine error rates
 \noindent\textbf{Stage~3 — Reliability-Guided Secure Sketch (RGSS).}
 The $G$-bit cancelable template and the associated tanh values are
 fed into RGSS, which selects $k$ reliable positions, embeds the
-authentication key, and outputs an helper-data string.
+authentication key, and outputs a helper-data string.
 Authentication reconstructs and verifies the key via BCH decoding.
 
 \noindent\textbf{Threat Model.}
@@ -411,6 +424,10 @@ Security is evaluated against four adversary types:
 (iii)~partial-key-leakage attacker; and
 (iv)~helper-data-aware attacker who additionally exploits $h$,
 $c$, and $\mathcal{R}$.
+Accordingly, public information includes $(h, c, \mathcal{R},
+\text{SHA256}(s))$, the network architecture, BCH parameters, and the
+RGSS algorithm, whereas secret information includes the CTM key
+$\kappa$ and the live biometric probe.
 We do \emph{not} claim unconditional cryptographic security;
 the construction provides template protection within this
 explicitly scoped threat model.
@@ -694,12 +711,14 @@ covering operating points $k \in \{120, 136, \ldots, 480\}$.
 RGSS and all baselines share the same BCH back-end for fairness.
 
 \noindent\textbf{Evaluation metrics.}
-The primary metric is the G--S (GAR vs.\ Security in Bits) curve
-with $k_{50}$ (last $k$ achieving GAR $\ge 50\%$), where
-``security in bits'' refers to the key length $k$---a standard
-parameter in template protection evaluation following~\cite{talreja2021deep}.
-We note that the actual conditional security level depends on the
-construction and may be lower than $k$; see Section~\ref{sec:exp:helper}.
+The primary metric is the GAR--key-length curve, together with
+$k_{50}$, the largest operating key length achieving GAR $\ge 50\%$.
+Throughout the paper, $k$ denotes the operating key length of the
+embedded authentication key, following common template-protection
+practice~\cite{talreja2021deep}.
+We do not interpret $k$ itself as a formal measure of cryptographic
+security; the actual resistance to attack depends on the construction
+and leakage assumptions (Section~\ref{sec:exp:helper}).
 Security analyses use EER, Dsys, linkability EER, and FAR
 under various attack models.
 
@@ -719,7 +738,7 @@ $G\!=\!512$ result in Exp.~7 falls within this expected range.
 \begin{figure}[!t]
   \centering
   \includegraphics[width=\linewidth]{exp1_rs_vs_bch}
-  \caption{G--S curves for RS and BCH schemes (G=512, FVC2004,
+  \caption{GAR--key-length curves for RS and BCH schemes (G=512, FVC2004,
   unknown-key setting).
   RS fails catastrophically ($\text{GAR}_{\max} = 2.68\%$);
   BCH achieves $k_{50}=208$\,bits with GAR up to 100\%.}
@@ -817,7 +836,7 @@ statistics, we exploit sample-level confidence at enrollment time.
 \begin{figure}[!t]
   \centering
   \includegraphics[width=\linewidth]{exp4_ablation_frontend}
-  \caption{G--S curves for three cancelable template frontends
+  \caption{GAR--key-length curves for three cancelable template frontends
   combined with BCH backend (G=512, FVC2004).
   StableCTM achieves $k_{50}=208$\,bits; BioHashing inflates
   flip rates and yields only $k_{50}=160$\,bits.}
@@ -859,13 +878,13 @@ already a binary code, and that StableCTM is a suitable frontend.
 \begin{figure}[!t]
   \centering
   \includegraphics[width=\linewidth]{exp5_sstm_comparison}
-  \caption{G--S curve comparison for BCH (baseline), RGSS (proposed),
+  \caption{GAR--key-length curve comparison for BCH (baseline), RGSS (proposed),
   and Polar/SCL secure sketches (G=512, FVC2004, unknown-key setting).}
   \label{fig:sstm}
 \end{figure}
 
 Fig.~\ref{fig:sstm} and Table~\ref{tab:sstm} summarize the
-G--S performance of three secure sketch designs.
+GAR--key-length performance of three secure sketch designs.
 
 \textbf{RGSS vs.\ BCH.}
 RGSS advances $k_{50}$ from 208\,bits to 264\,bits ($+56$\,bits).
@@ -908,9 +927,9 @@ these lengths.
 \begin{figure}[!t]
   \centering
   \includegraphics[width=\linewidth]{ablation_gs}
-  \caption{G--S curves for five channel-selection strategies
+  \caption{GAR--key-length curves for five channel-selection strategies
   (G=512, FVC2004).
-  RGSS (tanh confidence) exceeds the flip-rate oracle baseline
+  RGSS (tanh confidence) exceeds the test-set population flip-rate baseline
   (test-set per-bit statistics).}
   \label{fig:ablation}
 \end{figure}
@@ -922,9 +941,10 @@ five channel-selection strategies with an identical BCH backend
 \begin{table}[!t]
   \renewcommand{\arraystretch}{1.25}
   \caption{Channel Selection Strategy Ablation (G=512, FVC2004).
-  $^\dagger$Flip-rate Oracle: channels ranked by per-bit flip rates
-  computed on the \emph{test set} — a population-level statistic
-  using held-out labels, not a true upper bound on all strategies.}
+  $^\dagger$Test-set population flip-rate baseline: channels ranked by
+  per-bit flip rates computed on the \emph{test set}, i.e., a
+  population-level statistic using held-out labels. This baseline is
+  not a universal upper bound on all channel-selection strategies.}
   \label{tab:ablation}
   \centering
   \begin{tabular}{lccc}
@@ -934,24 +954,24 @@ five channel-selection strategies with an identical BCH backend
     Worst-channel  & 144 & $-64$ \\
     Random         & 208 &   --- \\
     Flip-rate      & 232 & $+24$ \\
-    Flip-rate Oracle$^\dagger$ & 240 & $+32$ \\
+    Test-set population flip-rate$^\dagger$ & 240 & $+32$ \\
     \textbf{RGSS (tanh)} & \textbf{264} & \textbf{$+56$} \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 The key finding is that RGSS ($k_{50}\!=\!264$) surpasses the
-flip-rate oracle baseline ($k_{50}\!=\!240$), which ranks channels
+test-set population flip-rate baseline ($k_{50}\!=\!240$), which ranks channels
 by per-bit flip rates computed on the test set.
 This result warrants explanation.
-The flip-rate oracle represents the ceiling achievable by
+This baseline represents a strong reference built from
 population-level statistics using test-set labels: it ranks channels
 by $\bar{p}_i$ averaged over all test images and users, approximating
 $\mathbb{E}_{\mathbf{x}}[P(\text{flip}_i \mid \mathbf{x})]$
 after marginalising over the acquisition distribution.
-Note that this baseline is \emph{not} a universal upper bound on all
-possible channel-selection strategies; it is specifically the best
-achievable by any group-level statistic.
+It is \emph{not} a universal upper bound on all
+possible channel-selection strategies; rather, it is a reference
+derived from a group-level statistic.
 In contrast, the tanh magnitude $|\tanh(z_i(\mathbf{x}))|$ serves as
 a direct proxy for $P(\text{flip}_i \mid \mathbf{x})$—the flip
 probability \emph{conditioned on the specific enrollment image}.
@@ -969,7 +989,7 @@ image than any population-level ranking can achieve.
 
 \begin{figure}[!t]
   \centering
-  \subfloat[G--S curves for $G \in \{128, 256, 512\}$.]%
+  \subfloat[GAR--key-length curves for $G \in \{128, 256, 512\}$.]%
     {\includegraphics[width=0.7\linewidth]{multi_g_combined}%
      \label{fig:multig_gs}}
   \\
@@ -1082,8 +1102,8 @@ non-mated pairs are from different users (3000 pairs, randomly sampled).
 Results:
 $D_\text{sys} = 0.046$, linkability EER $= 35.0\%$,
 mated mean $= 48.09\% \pm 2.45\%$, non-mated mean $= 49.94\% \pm 2.32\%$.
-The $D_\text{sys}$ value close to 0 indicates strong
-\emph{template-level} unlinkability under the evaluated protocol;
+The $D_\text{sys}$ value close to 0 indicates low
+\emph{template-level} linkability under the evaluated protocol;
 the distributions are highly overlapping (Fig.~\ref{fig:unlink_dist}).
 Linkability EER of 35\% (vs.\ 50\% ideal) reflects the 1.85\%
 mean gap, which is small relative to standard deviations of ${\sim}2.3\%$;
@@ -1166,7 +1186,8 @@ linkability EER ($35.1\%$) are essentially identical to StableCTM
 ($0.051$ / $33.8\%$), confirming that reliability-guided selection
 does not introduce additional linkable structure into the cancelable
 template beyond what the baseline StableCTM already exhibits.
-BioHashing achieves near-perfect unlinkability ($D_\text{sys}\!=\!0.005$)
+BioHashing yields very low linkability under this metric
+($D_\text{sys}\!=\!0.005$)
 but at the cost of a 27.9\% same-key distance — far beyond BCH
 correction capacity at any practical $k$ — explaining its poor
 GAR performance observed in Exp.~4.
@@ -1214,7 +1235,7 @@ identical to standard random guessing, confirming that reliable
 bits carry no population-level predictability advantage
 (see Section~\ref{sec:exp:entropy}).
 
-\subsection{Exp.~8c — Helper Data Leakage Analysis}
+\subsection{Helper-Data Leakage, Threat-Model Boundary, and Limitations}
 \label{sec:exp:helper}
 
 Under the threat model of Section~\ref{sec:system}, the stored
@@ -1302,7 +1323,7 @@ introduces a measurable linkability signal at the reliable-position
 level, and recommend masking or hashing $\mathcal{R}$ in security-sensitive
 deployments where this residual signal must be eliminated.
 
-\subsubsection{Entropy and Effective Security Analysis}
+\subsubsection{Entropy and Effective Key-Length Interpretation}
 \label{sec:exp:entropy}
 
 \begin{figure}[!t]
@@ -1413,7 +1434,7 @@ simultaneously stable across datasets without any backbone retraining.
 \end{figure}
 
 To assess statistical robustness, we fix the VGG-19 backbone and
-repeat the G--S evaluation under 5 independent subject-disjoint splits
+repeat the GAR--key-length evaluation under 5 independent subject-disjoint splits
 (seeds 42, 123, 456, 789, 1024).
 
 BCH $k_{50}$: $219.2 \pm 6.4$\,bits;
@@ -1440,14 +1461,20 @@ By leveraging sample-wise tanh confidence from a deep hashing network
 to select reliable BCH channel positions at enrollment time, RGSS
 consistently advances the GAR--key-length tradeoff by 56--80\,bits
 over BCH baselines across three fingerprint datasets, surpassing
-both population-level flip-rate guidance and the test-set flip-rate oracle baseline.
-Security evaluations confirm revocability, template-level
-unlinkability under the evaluated distance-based protocol
-($D_\text{sys}\!=\!0.046$), resistance to advanced attacks, and
-per-bit entropy preservation comparable to random selection.
-We acknowledge that the zero-padding helper-data construction exposes
-$G-k$ template bits outside the reliable channel; future work should
-adopt syndrome-based sketches to eliminate this disclosure.
+both population-level flip-rate guidance and the test-set population flip-rate baseline.
+Security evaluations support revocability, indicate low
+template-level linkability under the evaluated distance-based
+protocol ($D_\text{sys}\!=\!0.046$), and show no successful attacks
+under the evaluated advanced-attack settings, while per-bit entropy
+remains comparable to random selection.
+\noindent\textbf{Limitation.}
+The current zero-padding helper-data construction exposes $G-k$
+template bits outside the reliable channel and stores
+$\mathcal{R}$ in the clear, which creates a measurable
+reliable-position linkability signal.
+Future work should replace this helper-data design with
+syndrome-based sketches and protected representations of
+$\mathcal{R}$ to reduce this leakage boundary.
 These results collectively establish RGSS as an effective
 sample-adaptive secure sketch for deep binary biometric templates.
 
